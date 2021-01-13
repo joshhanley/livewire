@@ -2,15 +2,16 @@
 
 namespace Livewire\HydrationMiddleware;
 
-use DateTime;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Stringable;
-use Illuminate\Contracts\Queue\QueueableEntity;
+use DateTime;
 use Illuminate\Contracts\Database\ModelIdentifier;
-use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Contracts\Queue\QueueableCollection;
+use Illuminate\Contracts\Queue\QueueableEntity;
 use Illuminate\Queue\SerializesAndRestoresModelIdentifiers;
+use Illuminate\Support\Carbon as IlluminateCarbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Support\Stringable;
 use Livewire\Exceptions\PublicPropertyTypeNotAllowedException;
 
 class HydratePublicProperties implements HydrationMiddleware
@@ -178,27 +179,57 @@ class HydratePublicProperties implements HydrationMiddleware
         // Deserialize the models into the "meta" bag.
         data_set($response, 'memo.dataMeta.modelCollections.'.$property, $serializedModel);
 
+        $filteredModelData = static::filterData($instance->$property, $instance->rulesForModel($property)->keys());
+        // $filteredModelData = [];
+        // if ($rules = $instance->rulesForModel($property)) {
+        //     $keys = $rules->keys()
+        //         ->map([$instance, 'ruleWithNumbersReplacedByStars'])
+        //         ->mapInto(Stringable::class)
+        //         ->filter->contains('*.')
+        //         ->map->after('*.')
+        //         ->map->__toString();
+
+        //     $fullModelData = $instance->$property->map->toArray();
+
+        //     foreach ($fullModelData as $index => $data) {
+        //         $filteredModelData[$index] = [];
+
+        //         foreach ($keys as $key) {
+        //             data_set($filteredModelData[$index], $key, data_get($data, $key));
+        //         }
+        //     }
+        // }
+
+        // Only include the allowed data (defined by rules) in the response payload
+        data_set($response, 'memo.data.'.$property, $filteredModelData);
+    }
+
+    public static function filterData($data, $rules) {
         $filteredModelData = [];
-        if ($rules = $instance->rulesForModel($property)) {
-            $keys = $rules->keys()
-                ->map([$instance, 'ruleWithNumbersReplacedByStars'])
+
+          if ($rules) {
+            $keys = collect($rules)
                 ->mapInto(Stringable::class)
                 ->filter->contains('*.')
                 ->map->after('*.')
                 ->map->__toString();
 
-            $fullModelData = $instance->$property->map->toArray();
+            $fullModelData = $data->map->toArray();
 
-            foreach ($fullModelData as $index => $data) {
+            foreach ($fullModelData as $index => $fullData) {
                 $filteredModelData[$index] = [];
 
                 foreach ($keys as $key) {
-                    data_set($filteredModelData[$index], $key, data_get($data, $key));
+                  if(Str::of($key)->contains('.*.')) {
+                    $before = Str::of($key)->before('.*.')->__toString();
+                    $filteredModelData[$index][$before] = static::filterData(data_get($data[$index], $before), $key);
+                  } else {
+                    $filteredModelData[$index][$key] = data_get($fullData, $key);
+                  }
                 }
             }
         }
 
-        // Only include the allowed data (defined by rules) in the response payload
-        data_set($response, 'memo.data.'.$property, $filteredModelData);
-    }
+        return $filteredModelData;
+      }
 }
