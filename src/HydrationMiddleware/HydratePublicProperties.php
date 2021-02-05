@@ -125,12 +125,12 @@ class HydratePublicProperties implements HydrationMiddleware
 
         $dirtyModelData = $request->memo['data'][$property];
 
-        ray($serialized, $property, 'Dirty:', $dirtyModelData);
+        // ray($serialized, $property, 'Dirty:', $dirtyModelData);
 
         foreach ($idsWithNullsIntersparsed as $index => $id) {
-            ray('Loop'.' - Index: '.$index.' - ID: '.$id);
+            // ray('Loop'.' - Index: '.$index.' - ID: '.$id);
             $data = data_get($dirtyModelData, $index);
-            ray('Data', $data);
+            // ray('Data', $data);
 
             static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
 
@@ -172,19 +172,18 @@ class HydratePublicProperties implements HydrationMiddleware
     }
 
     public static function setDirtyData($model, $data) {
-        ray("Set First", $model, $data);
+        // ray("Set First", $model, $data);
 
         foreach ($data as $key => $value) {
             if (is_array($value)) {
                 // Do Recursive
-                ray("Recurive value:", $value);
+                // ray("Recurive value:", $value);
                 foreach($value as $index => $valueData) {
-                    ray("Model", $model, data_get($model,$key));
-                    ray("Value: " . $index . ' - ', $valueData);
-                    ray("Recursive will be:", data_get($model[$key], $index), data_get($value, $index));
+                    // ray("Model", $model, data_get($model,$key));
+                    // ray("Value: " . $index . ' - ', $valueData);
+                    // ray("Recursive will be:", data_get($model[$key], $index), data_get($value, $index));
                     static::setDirtyData(data_get($model[$key], $index), data_get($value, $index));
                 }
-                // static::setDirtyData(data_get($models[$key], $key), data_get($dirtyModelData[$index], $key));
             } else {
                 data_set($model, $key, data_get($data, $key));
             }
