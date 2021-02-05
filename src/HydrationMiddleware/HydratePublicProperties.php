@@ -134,18 +134,6 @@ class HydratePublicProperties implements HydrationMiddleware
         $instance->{$property} = $models;
     }
 
-    public static function setDirtyData($model, $data) {
-        foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                foreach($value as $index => $valueData) {
-                    static::setDirtyData(data_get($model[$key], $index), data_get($value, $index));
-                }
-            } else {
-                data_set($model, $key, data_get($data, $key));
-            }
-        }
-    }
-
     protected static function dehydrateModel($value, $property, $response, $instance)
     {
         $serializedModel = $value instanceof QueueableEntity && ! $value->exists
@@ -183,6 +171,18 @@ class HydratePublicProperties implements HydrationMiddleware
 
         // Only include the allowed data (defined by rules) in the response payload
         data_set($response, 'memo.data.'.$property, $filteredModelData);
+    }
+
+    public static function setDirtyData($model, $data) {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                foreach($value as $index => $valueData) {
+                    static::setDirtyData(data_get($model[$key], $index), data_get($value, $index));
+                }
+            } else {
+                data_set($model, $key, data_get($data, $key));
+            }
+        }
     }
 
     public static function filterData($data, $rules) {
