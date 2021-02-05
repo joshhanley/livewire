@@ -229,11 +229,10 @@ class HydratePublicProperties implements HydrationMiddleware
         data_set($response, 'memo.data.'.$property, $filteredModelData);
     }
 
-    public static function filterData($data, $rules)
-    {
+    public static function filterData($data, $rules) {
         $filteredModelData = [];
 
-        if ($rules) {
+          if ($rules) {
             $keys = collect($rules)
                 ->mapInto(Stringable::class)
                 ->filter->contains('*.')
@@ -246,17 +245,17 @@ class HydratePublicProperties implements HydrationMiddleware
                 $filteredModelData[$index] = [];
 
                 foreach ($keys as $key) {
-                    if (Str::of($key)->contains('.*.')) {
-                        $before = Str::of($key)->before('.*.')->__toString();
+                  if(Str::of($key)->contains('.*.')) {
+                    $before = Str::of($key)->before('.*.')->__toString();
 
-                        data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
-                    } else {
-                        data_set($filteredModelData[$index], $key, data_get($fullData, $key));
-                    }
+                    data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
+                  } else {
+                    data_set($filteredModelData[$index], $key, data_get($fullData, $key));
+                  }
                 }
             }
         }
 
         return $filteredModelData;
-    }
+      }
 }
