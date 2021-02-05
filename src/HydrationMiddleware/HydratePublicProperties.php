@@ -184,7 +184,6 @@ class HydratePublicProperties implements HydrationMiddleware
     }
 
     public static function filterData($data, $rules) {
-        // ray("Start FilterData", $data, $rules);
         $filteredModelData = [];
 
           if ($rules) {
@@ -194,56 +193,34 @@ class HydratePublicProperties implements HydrationMiddleware
                 ->map->after('*.')
                 ->map->__toString();
 
-                // ray("Keys", $keys);
-
             $fullModelData = $data->map->toArray();
 
-            // ray("Full model data", $fullModelData);
-
             foreach ($fullModelData as $index => $fullData) {
-                // ray("Array Set Index", $index);
-                // ray("Array Set Before", $filteredModelData);
                 $filteredModelData[$index] = [];
-                // ray("Array Set After", $filteredModelData);
 
                 $nestedKeys = [];
 
                 foreach ($keys as $key) {
-                    // ray("KEY: " . $key);
                   if(Str::of($key)->contains('.*.')) {
                     $nestedKeys[] = $key;
-                    // $before = Str::of($key)->before('.*.')->__toString();
-                    // ray("BEFORE: " . $before);
-                    // ray()->toJson("Recursive Before", $filteredModelData);
-                    // data_fill($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
-                    // ray()->toJson("Recursive After", $filteredModelData);
                   } else {
-                    // ray("Non Before", $filteredModelData);
                     data_fill($filteredModelData[$index], $key, data_get($fullData, $key));
-                    // ray("Non After", $filteredModelData);
                   }
                 }
 
-                if($nestedKeys) {
+                if ($nestedKeys) {
                     $nestedKeys = collect($nestedKeys)
                         ->mapInto(Stringable::class)
                         ->mapToGroups(function($key){
-                            return [
-                                $key->before('.*.')->__toString() => $key->__toString()
-                            ];
+                            return [$key->before('.*.')->__toString() => $key->__toString()];
                         });
 
-                        foreach($nestedKeys as $key => $rules) {
-                            // ray("EACH", $rules, $key);
-                            $results = static::filterData(data_get($data[$index], $key), $rules);
-                            // ray("RESULTS " . $key . " INDEX " . $index, $results);
-                            // ray("BEFORE RESET", $filteredModelData);
-                            data_fill($filteredModelData[$index], $key, $results);
-                            // ray("AFTER REST", $filteredModelData);
-                        }
+                    foreach($nestedKeys as $key => $rules) {
+                        $results = static::filterData(data_get($data[$index], $key), $rules);
+                        data_fill($filteredModelData[$index], $key, $results);
+                    }
                 }
             }
-            // ray('Filtered model data', $filteredModelData);
         }
 
         return $filteredModelData;
