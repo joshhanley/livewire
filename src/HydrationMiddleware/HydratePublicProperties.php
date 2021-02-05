@@ -125,24 +125,13 @@ class HydratePublicProperties implements HydrationMiddleware
 
         $dirtyModelData = $request->memo['data'][$property];
 
-        // ray($serialized, $property, 'Dirty:', $dirtyModelData);
-
         foreach ($idsWithNullsIntersparsed as $index => $id) {
-            // ray('Loop'.' - Index: '.$index.' - ID: '.$id);
             $data = data_get($dirtyModelData, $index);
-            // ray('Data', $data);
 
             static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
-
-            // foreach ($data as $key => $value) {
-            //     if (is_array($value)) {
-            //         // Do Recursive
-            //         static::setDirtyData(data_get($models[$index], $key), data_get($dirtyModelData[$index], $key));
-            //     } else {
-            //         data_set($models[$index], $key, data_get($dirtyModelData[$index], $key));
-            //     }
-            // }
         }
+
+        $instance->{$property} = $models;
 
         // foreach ($idsWithNullsIntersparsed as $index => $id) {
         //     if ($rules = $instance->rulesForModel($property)) {
@@ -165,23 +154,12 @@ class HydratePublicProperties implements HydrationMiddleware
         //         }
         //     }
         // }
-
-        $instance->{$property} = $models;
-
-        ray('Final:', $models);
     }
 
     public static function setDirtyData($model, $data) {
-        // ray("Set First", $model, $data);
-
         foreach ($data as $key => $value) {
             if (is_array($value)) {
-                // Do Recursive
-                // ray("Recurive value:", $value);
                 foreach($value as $index => $valueData) {
-                    // ray("Model", $model, data_get($model,$key));
-                    // ray("Value: " . $index . ' - ', $valueData);
-                    // ray("Recursive will be:", data_get($model[$key], $index), data_get($value, $index));
                     static::setDirtyData(data_get($model[$key], $index), data_get($value, $index));
                 }
             } else {
