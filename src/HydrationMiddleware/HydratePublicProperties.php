@@ -190,8 +190,7 @@ class HydratePublicProperties implements HydrationMiddleware
             $keys = collect($rules)
                 ->mapInto(Stringable::class)
                 ->filter->contains('*.')
-                ->map->after('*.')
-                ->map->__toString();
+                ->map->after('*.');
 
             $fullModelData = $data->map->toArray();
 
@@ -201,7 +200,7 @@ class HydratePublicProperties implements HydrationMiddleware
                 $nestedKeys = [];
 
                 foreach ($keys as $key) {
-                  if(Str::of($key)->contains('.*.')) {
+                  if($key->contains('.*.')) {
                     $nestedKeys[] = $key;
                   } else {
                     data_fill($filteredModelData[$index], $key, data_get($fullData, $key));
@@ -210,7 +209,6 @@ class HydratePublicProperties implements HydrationMiddleware
 
                 if ($nestedKeys) {
                     $nestedKeys = collect($nestedKeys)
-                        ->mapInto(Stringable::class)
                         ->mapToGroups(function($key){
                             return [$key->before('.*.')->__toString() => $key->__toString()];
                         });
