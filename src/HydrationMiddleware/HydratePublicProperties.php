@@ -132,28 +132,6 @@ class HydratePublicProperties implements HydrationMiddleware
         }
 
         $instance->{$property} = $models;
-
-        // foreach ($idsWithNullsIntersparsed as $index => $id) {
-        //     if ($rules = $instance->rulesForModel($property)) {
-        //         $keys = $rules->keys()
-        //             ->map([$instance, 'ruleWithNumbersReplacedByStars'])
-        //             ->mapInto(Stringable::class)
-        //             ->filter->contains('*.')
-        //             ->map->after('*.')
-        //             ->map->__toString();
-
-        //         ray($keys);
-
-        //         if (is_null($id)) {
-        //             $model = new $serialized['class']();
-        //             $models->splice($index, 0, [$model]);
-        //         }
-
-        //         foreach ($keys as $key) {
-        //             data_set($models[$index], $key, data_get($dirtyModelData[$index], $key));
-        //         }
-        //     }
-        // }
     }
 
     public static function setDirtyData($model, $data) {
