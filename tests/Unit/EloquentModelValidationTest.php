@@ -196,7 +196,7 @@ class EloquentModelValidationTest extends TestCase
             ->call('save')
             ->assertHasNoErrors();
 
-        $this->assertEquals([[['users.1.items.0.title' => 'sparkling']]], $users[0]->fresh()->items[0]->title);
+        $this->assertEquals('sparkling', $users[1]->fresh()->items[0]->title);
     }
 }
 
