@@ -37,18 +37,18 @@ class HydratePublicProperties implements HydrationMiddleware
                 ];
 
                 data_set($instance, $property, new $types[$type]($value));
-            } else if (in_array($property, $collections)) {
+            } elseif (in_array($property, $collections)) {
                 data_set($instance, $property, collect($value));
-            } else if ($serialized = data_get($models, $property)) {
+            } elseif ($serialized = data_get($models, $property)) {
                 static::hydrateModel($serialized, $property, $request, $instance);
-            } else if ($serialized = data_get($modelCollections, $property)) {
+            } elseif ($serialized = data_get($modelCollections, $property)) {
                 static::hydrateModels($serialized, $property, $request, $instance);
-            } else if (in_array($property, $stringables)) {
+            } elseif (in_array($property, $stringables)) {
                 data_set($instance, $property, new Stringable($value));
             } else {
                 // If the value is null, don't set it, because all values start off as null and this
                 // will prevent Typed properties from wining about being set to null.
-                is_null($value) || $instance->$property = $value;
+                is_null($value) || $instance->{$property} = $value;
             }
         }
     }
@@ -66,15 +66,15 @@ class HydratePublicProperties implements HydrationMiddleware
                 is_bool($value) || is_null($value) || is_array($value) || is_numeric($value) || is_string($value)
             ) {
                 data_set($response, 'memo.data.'.$key, $value);
-            } else if ($value instanceof QueueableEntity) {
+            } elseif ($value instanceof QueueableEntity) {
                 static::dehydrateModel($value, $key, $response, $instance);
-            } else if ($value instanceof QueueableCollection) {
+            } elseif ($value instanceof QueueableCollection) {
                 static::dehydrateModels($value, $key, $response, $instance);
-            } else if ($value instanceof Collection) {
+            } elseif ($value instanceof Collection) {
                 $response->memo['dataMeta']['collections'][] = $key;
 
                 data_set($response, 'memo.data.'.$key, $value->toArray());
-            } else if ($value instanceof DateTime) {
+            } elseif ($value instanceof DateTime) {
                 if ($value instanceof IlluminateCarbon) {
                     $response->memo['dataMeta']['dates'][$key] = 'illuminate';
                 } elseif ($value instanceof Carbon) {
@@ -84,7 +84,7 @@ class HydratePublicProperties implements HydrationMiddleware
                 }
 
                 data_set($response, 'memo.data.'.$key, $value->format(\DateTimeInterface::ISO8601));
-            } else if ($value instanceof Stringable) {
+            } elseif ($value instanceof Stringable) {
                 $response->memo['dataMeta']['stringables'][] = $key;
 
                 data_set($response, 'memo.data.'.$key, $value->__toString());
@@ -97,11 +97,11 @@ class HydratePublicProperties implements HydrationMiddleware
     protected static function hydrateModel($serialized, $property, $request, $instance)
     {
         if (isset($serialized['id'])) {
-            $model = (new static)->getRestoredPropertyValue(
+            $model = (new static())->getRestoredPropertyValue(
                 new ModelIdentifier($serialized['class'], $serialized['id'], $serialized['relations'], $serialized['connection'])
             );
         } else {
-            $model = new $serialized['class'];
+            $model = new $serialized['class']();
         }
 
         $modelData = $request->memo['data'][$property];
@@ -110,85 +110,92 @@ class HydratePublicProperties implements HydrationMiddleware
             data_set($model, $key, $value);
         }
 
-        $instance->$property = $model;
+        $instance->{$property} = $model;
     }
 
     protected static function hydrateModels($serialized, $property, $request, $instance)
     {
         $idsWithNullsIntersparsed = $serialized['id'];
 
-        $models = (new static)->getRestoredPropertyValue(
+        $models = (new static())->getRestoredPropertyValue(
             new ModelIdentifier($serialized['class'], $serialized['id'], $serialized['relations'], $serialized['connection'])
         );
 
+        $models->loadMissing($serialized['relations']);
+
         $dirtyModelData = $request->memo['data'][$property];
 
+        ray($serialized, $property, 'Dirty:', $dirtyModelData);
+
         foreach ($idsWithNullsIntersparsed as $index => $id) {
-            if ($rules = $instance->rulesForModel($property)) {
-                $keys = $rules->keys()
-                    ->map([$instance, 'ruleWithNumbersReplacedByStars'])
-                    ->mapInto(Stringable::class)
-                    ->filter->contains('*.')
-                    ->map->after('*.')
-                    ->map->__toString();
+            ray('Loop'.' - Index: '.$index.' - ID: '.$id);
+            $data = data_get($dirtyModelData, $index);
+            ray('Data', $data);
 
-                if (is_null($id)) {
-                    $model = new $serialized['class'];
-                    $models->splice($index, 0, [$model]);
-                }
+            static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
 
-                foreach ($keys as $key) {
-                    data_set($models[$index], $key, data_get($dirtyModelData[$index], $key));
-                }
-            }
+            // foreach ($data as $key => $value) {
+            //     if (is_array($value)) {
+            //         // Do Recursive
+            //         static::setDirtyData(data_get($models[$index], $key), data_get($dirtyModelData[$index], $key));
+            //     } else {
+            //         data_set($models[$index], $key, data_get($dirtyModelData[$index], $key));
+            //     }
+            // }
         }
 
-        $instance->$property = $models;
+        // foreach ($idsWithNullsIntersparsed as $index => $id) {
+        //     if ($rules = $instance->rulesForModel($property)) {
+        //         $keys = $rules->keys()
+        //             ->map([$instance, 'ruleWithNumbersReplacedByStars'])
+        //             ->mapInto(Stringable::class)
+        //             ->filter->contains('*.')
+        //             ->map->after('*.')
+        //             ->map->__toString();
+
+        //         ray($keys);
+
+        //         if (is_null($id)) {
+        //             $model = new $serialized['class']();
+        //             $models->splice($index, 0, [$model]);
+        //         }
+
+        //         foreach ($keys as $key) {
+        //             data_set($models[$index], $key, data_get($dirtyModelData[$index], $key));
+        //         }
+        //     }
+        // }
+
+        $instance->{$property} = $models;
+
+        ray('Final:', $models);
     }
 
-    protected static function dehydrateModel($value, $property, $response, $instance)
-    {
-        $serializedModel = $value instanceof QueueableEntity && ! $value->exists
-            ? ['class' => get_class($value)]
-            : (array) (new static)->getSerializedPropertyValue($value);
+    public static function setDirtyData($model, $data) {
+        ray("Set First", $model, $data);
 
-        // Deserialize the models into the "meta" bag.
-        data_set($response, 'memo.dataMeta.models.'.$property, $serializedModel);
-
-        $filteredModelData = [];
-        if ($rules = $instance->rulesForModel($property)) {
-            $keys = $rules->keys()->map(function ($key) use ($instance) {
-                return $instance->beforeFirstDot($instance->afterFirstDot($key));
-            });
-
-            $fullModelData = $instance->$property->toArray();
-
-            foreach ($keys as $key) {
-                data_set($filteredModelData, $key, data_get($fullModelData, $key));
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                // Do Recursive
+                ray("Recurive value:", $value);
+                foreach($value as $index => $valueData) {
+                    ray("Model", $model, data_get($model,$key));
+                    ray("Value: " . $index . ' - ', $valueData);
+                    ray("Recursive will be:", data_get($model[$key], $index), data_get($value, $index));
+                    static::setDirtyData(data_get($model[$key], $index), data_get($value, $index));
+                }
+                // static::setDirtyData(data_get($models[$key], $key), data_get($dirtyModelData[$index], $key));
+            } else {
+                data_set($model, $key, data_get($data, $key));
             }
         }
-
-        // Only include the allowed data (defined by rules) in the response payload
-        data_set($response, 'memo.data.'.$property, $filteredModelData);
     }
 
-    protected static function dehydrateModels($value, $property, $response, $instance)
+    public static function filterData($data, $rules)
     {
-        $serializedModel = (array) (new static)->getSerializedPropertyValue($value);
-
-        // Deserialize the models into the "meta" bag.
-        data_set($response, 'memo.dataMeta.modelCollections.'.$property, $serializedModel);
-
-        $filteredModelData = static::filterData($instance->$property, $instance->rulesForModel($property)->keys());
-
-        // Only include the allowed data (defined by rules) in the response payload
-        data_set($response, 'memo.data.'.$property, $filteredModelData);
-    }
-
-    public static function filterData($data, $rules) {
         $filteredModelData = [];
 
-          if ($rules) {
+        if ($rules) {
             $keys = collect($rules)
                 ->mapInto(Stringable::class)
                 ->filter->contains('*.')
@@ -201,17 +208,56 @@ class HydratePublicProperties implements HydrationMiddleware
                 $filteredModelData[$index] = [];
 
                 foreach ($keys as $key) {
-                  if(Str::of($key)->contains('.*.')) {
-                    $before = Str::of($key)->before('.*.')->__toString();
+                    if (Str::of($key)->contains('.*.')) {
+                        $before = Str::of($key)->before('.*.')->__toString();
 
-                    data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
-                  } else {
-                    data_set($filteredModelData[$index], $key, data_get($fullData, $key));
-                  }
+                        data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
+                    } else {
+                        data_set($filteredModelData[$index], $key, data_get($fullData, $key));
+                    }
                 }
             }
         }
 
         return $filteredModelData;
-      }
+    }
+
+    protected static function dehydrateModel($value, $property, $response, $instance)
+    {
+        $serializedModel = $value instanceof QueueableEntity && ! $value->exists
+            ? ['class' => get_class($value)]
+            : (array) (new static())->getSerializedPropertyValue($value);
+
+        // Deserialize the models into the "meta" bag.
+        data_set($response, 'memo.dataMeta.models.'.$property, $serializedModel);
+
+        $filteredModelData = [];
+        if ($rules = $instance->rulesForModel($property)) {
+            $keys = $rules->keys()->map(function ($key) use ($instance) {
+                return $instance->beforeFirstDot($instance->afterFirstDot($key));
+            });
+
+            $fullModelData = $instance->{$property}->toArray();
+
+            foreach ($keys as $key) {
+                data_set($filteredModelData, $key, data_get($fullModelData, $key));
+            }
+        }
+
+        // Only include the allowed data (defined by rules) in the response payload
+        data_set($response, 'memo.data.'.$property, $filteredModelData);
+    }
+
+    protected static function dehydrateModels($value, $property, $response, $instance)
+    {
+        $serializedModel = (array) (new static())->getSerializedPropertyValue($value);
+
+        // Deserialize the models into the "meta" bag.
+        data_set($response, 'memo.dataMeta.modelCollections.'.$property, $serializedModel);
+
+        $filteredModelData = static::filterData($instance->{$property}, $instance->rulesForModel($property)->keys());
+
+        // Only include the allowed data (defined by rules) in the response payload
+        data_set($response, 'memo.data.'.$property, $filteredModelData);
+    }
 }
