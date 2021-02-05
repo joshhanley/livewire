@@ -126,6 +126,11 @@ class HydratePublicProperties implements HydrationMiddleware
         $dirtyModelData = $request->memo['data'][$property];
 
         foreach ($idsWithNullsIntersparsed as $index => $id) {
+            if (is_null($id)) {
+                $model = new $serialized['class'];
+                $models->splice($index, 0, [$model]);
+            }
+            
             static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
         }
 
