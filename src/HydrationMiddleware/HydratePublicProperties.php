@@ -190,37 +190,6 @@ class HydratePublicProperties implements HydrationMiddleware
         }
     }
 
-    public static function filterData($data, $rules)
-    {
-        $filteredModelData = [];
-
-        if ($rules) {
-            $keys = collect($rules)
-                ->mapInto(Stringable::class)
-                ->filter->contains('*.')
-                ->map->after('*.')
-                ->map->__toString();
-
-            $fullModelData = $data->map->toArray();
-
-            foreach ($fullModelData as $index => $fullData) {
-                $filteredModelData[$index] = [];
-
-                foreach ($keys as $key) {
-                    if (Str::of($key)->contains('.*.')) {
-                        $before = Str::of($key)->before('.*.')->__toString();
-
-                        data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
-                    } else {
-                        data_set($filteredModelData[$index], $key, data_get($fullData, $key));
-                    }
-                }
-            }
-        }
-
-        return $filteredModelData;
-    }
-
     protected static function dehydrateModel($value, $property, $response, $instance)
     {
         $serializedModel = $value instanceof QueueableEntity && ! $value->exists
@@ -258,5 +227,36 @@ class HydratePublicProperties implements HydrationMiddleware
 
         // Only include the allowed data (defined by rules) in the response payload
         data_set($response, 'memo.data.'.$property, $filteredModelData);
+    }
+
+    public static function filterData($data, $rules)
+    {
+        $filteredModelData = [];
+
+        if ($rules) {
+            $keys = collect($rules)
+                ->mapInto(Stringable::class)
+                ->filter->contains('*.')
+                ->map->after('*.')
+                ->map->__toString();
+
+            $fullModelData = $data->map->toArray();
+
+            foreach ($fullModelData as $index => $fullData) {
+                $filteredModelData[$index] = [];
+
+                foreach ($keys as $key) {
+                    if (Str::of($key)->contains('.*.')) {
+                        $before = Str::of($key)->before('.*.')->__toString();
+
+                        data_set($filteredModelData[$index], $before, static::filterData(data_get($data[$index], $before), $key));
+                    } else {
+                        data_set($filteredModelData[$index], $key, data_get($fullData, $key));
+                    }
+                }
+            }
+        }
+
+        return $filteredModelData;
     }
 }
