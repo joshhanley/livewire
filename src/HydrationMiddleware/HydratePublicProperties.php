@@ -131,7 +131,7 @@ class HydratePublicProperties implements HydrationMiddleware
             static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
         }
 
-        $instance->{$property} = $models;
+        $instance->$property = $models;
     }
 
     protected static function dehydrateModel($value, $property, $response, $instance)
