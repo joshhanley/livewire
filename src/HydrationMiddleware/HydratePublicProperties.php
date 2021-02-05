@@ -126,8 +126,6 @@ class HydratePublicProperties implements HydrationMiddleware
         $dirtyModelData = $request->memo['data'][$property];
 
         foreach ($idsWithNullsIntersparsed as $index => $id) {
-            $data = data_get($dirtyModelData, $index);
-
             static::setDirtyData(data_get($models, $index), data_get($dirtyModelData, $index));
         }
 
