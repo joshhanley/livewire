@@ -4,8 +4,8 @@
     <button wire:click="redirectWithFlash" dusk="redirect-with-flash">Redirect With Flash</button>
 
     <button wire:click="redirectPage" dusk="redirect.button">Redirect Page</button>
-    <span dusk="redirect.blade.output">{{ $message }}</span>
-    <span x-data="{ message: @entangle('message') }" x-text="message" dusk="redirect.alpine.output"></span>
+    <span dusk="redirect.blade.output">{{ $post->message }}</span>
+    <span x-data="{ message: @entangle('post.message') }" x-text="message" dusk="redirect.alpine.output"></span>
 
     <div>
         @if (session()->has('message'))
