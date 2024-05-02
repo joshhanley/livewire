@@ -89,4 +89,33 @@ class BrowserTest extends BrowserTestCase
         ->refresh()
         ->assertSeeIn('@count', '1');
     }
+
+    /** @test */
+    public function computed_properties_cannot_be_set_on_front_end()
+    {
+        Livewire::visit(new class extends Component {
+            public $count = 0;
+
+            #[Computed]
+            public function foo() {
+                return 'bar';
+            }
+
+            function render()
+            {
+                return <<<'HTML'
+                <div>
+                    <p>Foo: <span dusk="foo">{{ $this->foo }}</span></p>
+                    <button wire:click="$set('foo', 'other')" dusk="change-foo">Change Foo</button>
+                </div>
+                HTML;
+            }
+        })
+        ->assertSeeIn('@foo', 'bar')
+        ->assertScript("return window.Livewire.first().get('foo') === undefined")
+        ->waitForLivewire()->click('@change-foo')
+        ->assertScript("return window.Livewire.first().get('foo') === undefined")
+        ->assertSeeIn('@foo', 'bar')
+        ;
+    }
 }
