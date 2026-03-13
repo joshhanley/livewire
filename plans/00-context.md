@@ -47,6 +47,7 @@ Discussions: #9591, #9737, #9830
 - `04-pr-comparison.md` - Comparison of PR #9861 approach vs our plan
 - `05-alpine-options.md` - Alpine-side options (auto-retry, deferInit/resumeInit, `_x_ignore` as-is, promise-based `_x_defer`)
 - `06-experts-plans.md` - Final expert recommendations: two camps (`payload.intercept` vs `_x_defer` + `onPrepare`)
+- `07-payload-intercept-analysis.md` - Deep dive on `payload.intercept` hook: timing, scenarios, trade-offs vs `onPrepare`
 
 Alpine source is available locally at `packages/alpine` (APFS clone from `/Users/josh/tend/packages/alpine`, on `main`).
 
