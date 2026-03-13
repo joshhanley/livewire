@@ -41,9 +41,10 @@ Discussions: #9591, #9737, #9830
 
 ## Documents
 
-- `plans/initial-findings.md` - Full race condition analysis, solution ideas A-D, morph delay options A-E, modulepreload enhancement, resolved questions
-- `plans/experts-review.md` - First expert review (scenario completeness, technical validation)
-- `plans/experts-recommendation.md` - Expert implementation recommendations and build order
+- `01-initial-findings.md` - Full race condition analysis, solution ideas A-D, morph delay options A-E, modulepreload enhancement, resolved questions
+- `02-experts-review.md` - First expert review (scenario completeness, technical validation)
+- `03-experts-recommendation.md` - Expert implementation recommendations and build order
+- `04-pr-comparison.md` - Comparison of PR #9861 approach vs our plan
 
 ## Decisions made
 
