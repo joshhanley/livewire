@@ -141,15 +141,69 @@ Our current Idea B works without any Alpine changes. The `_x_ignore` + `skip()` 
 
 **Mitigating factor:** Since we maintain both projects, `_x_ignore` is effectively stable. We control both sides.
 
-## Recommendation
+## Approach 4: Promise-Based Defer (`_x_defer`)
 
-**Approach 2 (deferInit/resumeInit) is the cleanest option, but Approach 3 is perfectly fine.**
+Alpine supports a promise on any element. When `initTree` encounters an element with `_x_defer` set to a promise, it skips the element and its children, then automatically re-inits when the promise resolves. Livewire just sets the promise; Alpine handles everything else.
 
-The decision comes down to whether formalising the API is worth the Alpine change:
+**Alpine changes (~10 lines in `lifecycle.js`):**
 
-- If we want other plugins or users to be able to defer init for async reasons, Approach 2 provides a proper API.
-- If this is purely a Livewire-internal concern, Approach 3 avoids touching Alpine at all.
+In `initTree`'s walker, add a check before `interceptInit` and directives:
 
-Either way, the Livewire-side work is identical: Ideas A and B plus the `onPrepare` morph delay hook. The Alpine choice only affects whether Livewire calls `Alpine.deferInit(el)` or sets `el._x_ignore = true` directly.
+```js
+walker(el, (el, skip) => {
+    if (el._x_marker) return
 
-Approach 1 (auto-retry) should not be pursued. The silent typo problem and expression parsing complexity make it a poor fit.
+    if (el._x_defer) {
+        el._x_defer.then(() => {
+            delete el._x_defer
+            if (!el.isConnected) return
+            initTree(el)
+        }).catch(() => {
+            delete el._x_defer
+            if (!el.isConnected) return
+            console.warn('Alpine: deferred init failed, initialising without waiting')
+            initTree(el)
+        })
+        skip()
+        return
+    }
+
+    initInterceptors.forEach(i => i(el, skip))
+    directives(el, el.attributes).forEach(handle => handle())
+    if (!el._x_ignore) el._x_marker = markerDispenser++
+    el._x_ignore && skip()
+})
+```
+
+**How Livewire would use it:**
+
+`supportJsModules.js` would need to expose the module load promise per component. Then in `lifecycle.js`'s `interceptInit`:
+
+```js
+if (assetIsPendingFor(component)) {
+    el._x_defer = getAssetPromiseFor(component)
+    skip()
+    return
+}
+```
+
+**Why this is better than Approaches 2 and 3:**
+
+- **No manual re-init.** Livewire doesn't call `initTree(el)` or `Alpine.resumeInit(el)`. Alpine handles re-init automatically when the promise resolves.
+- **No `_x_ignore` usage.** Livewire doesn't touch internal Alpine flags. `_x_defer` is a clean, single-purpose mechanism.
+- **No `runAfterAssetIsLoadedFor`.** The promise IS the callback mechanism. No need for Livewire's own pending callback system.
+- **Error handling is built in.** Alpine catches failed promises, logs a warning, and inits the component anyway. Livewire doesn't need its own error handling for the deferred init path.
+- **Self-documenting.** Setting a promise on an element clearly communicates intent: "this element is waiting for something async."
+
+**No double-init:** The walker returns before reaching the `_x_marker` assignment line, so `_x_marker` is never set. When the promise resolves and `initTree(el)` is called, the element has no marker and proceeds normally. `interceptInit` fires again but skips Component creation because `el.__livewire` exists. Everything fires exactly once, same as Approach 3.
+
+**Pros:**
+- Minimal Alpine change (~10 lines)
+- Simplifies Livewire's deferred init to a single line (set a promise)
+- Error handling and re-init logic live in Alpine, not scattered across Livewire
+- Clean API that any plugin could use
+- Promise-based, which is the natural primitive for "wait for async thing"
+
+**Cons:**
+- Requires Alpine change (but small)
+- Adds `_x_defer` to Alpine's element property conventions
