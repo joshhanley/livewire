@@ -1,0 +1,1 @@
+I will read the target document `plans/alpine-data-module-options.md` and the key research documents `plans/00-context.md`, `plans/01-initial-findings.md`, `plans/06-experts-plans.md`, and `plans/07-payload-intercept-analysis.md` to understand the context and proposed solution.

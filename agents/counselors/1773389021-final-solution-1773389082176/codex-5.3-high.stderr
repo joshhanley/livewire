@@ -1,0 +1,996 @@
+OpenAI Codex v0.101.0 (research preview)
+--------
+workdir: /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire
+model: gpt-5.3-codex
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: auto
+session id: 019ce639-f58f-7e70-97f3-6db03bfab9b1
+--------
+user
+Read the file at /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire/agents/counselors/1773389021-final-solution-1773389082176/prompt.md and follow the instructions within it.
+mcp: laravel-boost starting
+mcp: herd starting
+mcp: laravel-boost failed: MCP client for `laravel-boost` failed to start: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response
+mcp: herd ready
+mcp startup: ready: herd; failed: laravel-boost
+
+thinking
+**Planning file read with exec_command**
+codex
+I’ll open the prompt file you specified, extract its instructions, and then execute them exactly as written. I’m starting by reading that file now.
+exec
+/bin/zsh -lc 'cat /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire/agents/counselors/1773389021-final-solution-1773389082176/prompt.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+# Final Solution Recommendation
+
+## Background
+
+We've spent significant time analysing a race condition in Livewire v4 where SFC/MFC script modules load asynchronously via `import()` but Alpine processes `x-data` synchronously, causing "Can't find variable" errors. We maintain both Livewire and Alpine, so changes to either or both are on the table.
+
+All the research is done. We need you to read everything and tell us: **what is the best solution?**
+
+## All Research Documents
+
+Read all of these thoroughly. They represent the full body of research:
+
+- @plans/00-context.md — Context summary, key files, decisions made, discoveries
+- @plans/01-initial-findings.md — Full race condition analysis, solution ideas A-D, morph delay options A-E, resolved questions
+- @plans/02-experts-review.md — First expert review (scenario validation, technical concerns)
+- @plans/03-experts-recommendation.md — Expert implementation recommendations and build order
+- @plans/04-pr-comparison.md — Comparison with the existing PR #9861 and Caleb's feedback
+- @plans/05-alpine-options.md — Alpine-side options including promise-based `_x_defer`
+
+## Key Source Files
+
+thinking
+**Planning parallel file reads**
+codex
+I’ve loaded the top-level task. Next I’ll read each research doc and the referenced Livewire/Alpine source files, then synthesize a single concrete recommendation with implementation order.
+exec
+/bin/zsh -lc "pwd; rg --files plans js packages/alpine/packages/alpinejs/src | sed -n '1,240p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+/Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire
+rg: packages/alpine/packages/alpinejs/src: No such file or directory (os error 2)
+plans/02-experts-review.md
+plans/04-pr-comparison.md
+plans/05-alpine-options.md
+plans/01-initial-findings.md
+plans/03-experts-recommendation.md
+plans/00-context.md
+js/directives.spec.js
+js/morph.js
+js/events.js
+js/jsconfig.json
+js/lifecycle.js
+js/island.js
+js/diff.spec.js
+js/directives.js
+js/utils.js
+js/fragment.js
+js/request/messageBus.js
+js/directives/wire-bind.js
+
+thinking
+**Locating missing alpine source**
+codex
+I confirmed the Livewire docs/files are present. The Alpine source path in the prompt doesn’t exist here, so I’m locating the local Alpine checkout next before reading those files.
+exec
+/bin/zsh -lc "ls -la ..; ls -la ../..; find ../../.. -maxdepth 4 -type d -name alpine 2>/dev/null | sed -n '1,40p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 1.10s:
+../../../livewire-alpine-data/packages/alpine
+
+thinking
+**Planning parallel file reading**
+exec
+/bin/zsh -lc "wc -l plans/00-context.md plans/01-initial-findings.md plans/02-experts-review.md plans/03-experts-recommendation.md plans/04-pr-comparison.md plans/05-alpine-options.md js/features/supportJsModules.js js/lifecycle.js js/request/index.js js/request/message.js js/request/interceptor.js js/features/supportMorphDom.js js/directives/wire-loading.js 'js/"'$wire.js'"' js/features/supportPreserveScroll.js ../alpine/packages/alpinejs/src/lifecycle.js ../alpine/packages/alpinejs/src/directives/x-data.js ../alpine/packages/alpinejs/src/datas.js ../alpine/packages/alpinejs/src/directives.js ../alpine/packages/alpinejs/src/mutation.js" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+      90 plans/00-context.md
+     331 plans/01-initial-findings.md
+      40 plans/02-experts-review.md
+      77 plans/03-experts-recommendation.md
+      72 plans/04-pr-comparison.md
+     209 plans/05-alpine-options.md
+      37 js/features/supportJsModules.js
+     135 js/lifecycle.js
+     639 js/request/index.js
+     275 js/request/message.js
+     130 js/request/interceptor.js
+      14 js/features/supportMorphDom.js
+     223 js/directives/wire-loading.js
+     376 js/$wire.js
+      31 js/features/supportPreserveScroll.js
+     141 ../alpine/packages/alpinejs/src/lifecycle.js
+      67 ../alpine/packages/alpinejs/src/directives/x-data.js
+      22 ../alpine/packages/alpinejs/src/datas.js
+     229 ../alpine/packages/alpinejs/src/directives.js
+     220 ../alpine/packages/alpinejs/src/mutation.js
+
+thinking
+**Reading large files in chunks**
+codex
+I’ve mapped all target files and found the Alpine sources in the sibling `../alpine` package. I’m reading the six research docs first, then I’ll extract the needed details from Livewire and Alpine source to finalize one recommendation.
+exec
+/bin/zsh -lc 'cat plans/04-pr-comparison.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'cat plans/05-alpine-options.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'cat plans/01-initial-findings.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'cat plans/03-experts-recommendation.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'cat plans/00-context.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'cat plans/02-experts-review.md' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+# PR #9861 Comparison
+
+## Caleb's Feedback
+
+> "we need to think more about this one."
+>
+> "things we want: as few as possible changes to the initialization lifecycle of livewire/alpine, so ideally fetching everything ahead of time and holding everything else up during that fetch"
+>
+> "I bet there's some out of the box things we're missing here. idk..."
+
+Key takeaway: Caleb wants **minimal lifecycle changes** and suspects there's a simpler approach.
+
+## Claude Auto-Review (posted by Caleb)
+
+The auto-review suggested two alternative approaches:
+
+1. **Make Alpine tolerant of late `Alpine.data()` registrations** (have `x-data` retry/defer when it encounters an unregistered name). Alpine-side change, zero cost for pages without SFC scripts.
+2. **MutationObserver / Alpine interceptor** to re-init subtrees when modules load.
+
+Approach 2 is essentially our Idea B (deferred init via `_x_ignore` + `skip()` + re-init).
+ succeeded in 50ms:
+# Script Module Loading: Race Condition Analysis and Solution Ideas
+
+## The Problem
+
+Livewire v4 SFC/MFC components can have co-located JavaScript files (either `<script>` blocks in SFCs or separate `.js` files in MFCs). These are compiled into ES modules served from `/livewire/js/{component}.js` and loaded dynamically via `import()`.
+
+The core issue: **script modules load asynchronously, but Alpine processes `x-data` synchronously**. When a script module contains `Alpine.data()` registrations, those registrations aren't available when Alpine evaluates `x-data="componentName"`, causing "Can't find variable" errors.
+
+**Reported in:**
+- [#9591](https://github.com/livewire/livewire/discussions/9591) - SFC with `Alpine.data()` in `<script>` block
+- [#9737](https://github.com/livewire/livewire/discussions/9737) - Same issue, also affects MFC `.js` files
+- [#9830](https://github.com/livewire/livewire/discussions/9830) - Detailed analysis of MFC `.js` files not working with `Alpine.data()`
+
+## Current Architecture
+
+### How script modules are served
+
+1. The compiler (`Parser.php`) injects a `scriptModuleSrc()` method into the component class, pointing to the compiled `.js` file
+2. `SupportJsModules.php` adds a `scriptModule` effect (a hash of the file's mtime) during `dehydrate()`
+3. A route at `/livewire/js/{encoded-name}.js` serves the file contents
+ succeeded in 50ms:
+# Alpine-Side Options
+
+Caleb suggested exploring whether Alpine could be changed instead of (or alongside) Livewire. Since we maintain both projects, all options are on the table.
+
+## How Alpine Resolves `x-data` Today
+
+In `x-data.js`, the handler:
+1. Creates a `dataProviderContext` object
+2. Calls `injectDataProviders(dataProviderContext)` which adds all registered `Alpine.data()` components as properties
+3. Evaluates the expression with this context in scope: `evaluate(el, expression, { scope: dataProviderContext })`
+4. If the expression is a simple name like `"myComponent"`, it's resolved via JavaScript scope lookup
+5. If the name isn't registered, JavaScript throws a ReferenceError (no error handling)
+
+The registered data components live in a plain object (`datas`) in `datas.js`. There's no reactivity, no retry mechanism, and no concept of "pending" registrations.
+
+## Approach 1: Alpine Auto-Retries Unresolved Data Names
+
+When `x-data` can't resolve an expression, catch the error, queue the element, and re-init when `Alpine.data()` is later called with that name.
+
+**Alpine changes:**
+ succeeded in 51ms:
+# Expert Review: Script Module Race Condition Analysis
+
+**Agents consulted:** claude-opus, codex-5.3-high, gemini-2.5-pro
+
+## Consensus
+
+All three experts agree:
+- The three scenarios are **complete**; edge cases (nested components, `@if` toggles, navigate, modals, multiple instances) are variations of the existing three
+- **Idea C (A + B) with morph delay Option C (`onBeforeMorph` hook)** is the strongest approach
+- The **double-init analysis is correct** (everything fires exactly once)
+- Idea D is the weakest option
+- **Error handling is critical** since the current `import()` has no `.catch()`, meaning a failed module blocks everything forever
+
+## Key Issues Raised
+
+1. **`wire:loading` timing (Codex, critical):** Codex flags that `wire:loading` is cleared in `onEffect`, which runs *before* `onMorph`. So delaying the morph alone may not actually preserve the loading state as we've documented. The loading indicators could disappear before the morph even starts. **This needs investigation.**
+
+2. **Nested script-module components waterfall (all three):** If a parent has a script module and a child also has one, Idea B causes a waterfall: parent module loads, `initTree` re-runs, discovers child, child module loads, `initTree` re-runs again. This doubles latency for nested cases. Idea A (pre-import) avoids this for initial load since all modules load in parallel.
+
+3. **Remove-before-reinit (Codex):** If a component is removed from the DOM (navigate away, modal close, `@if` toggle) while its module is still loading, the `runAfterAssetIsLoadedFor` callback fires on a detached element. Elements without `_x_marker` don't get Alpine's removal cleanup. Could leave stale components in the store.
+ succeeded in 51ms:
+# Script Module Loading Fix - Context
+
+## What we're doing
+
+Fixing a race condition where Livewire v4 SFC/MFC script modules (containing `Alpine.data()` registrations) load asynchronously but Alpine processes `x-data` synchronously, causing "Can't find variable" errors.
+
+Discussions: #9591, #9737, #9830
+
+## Key files
+
+- `js/features/supportJsModules.js` - JS-side module loading (effect hook, async import, pending asset tracking)
+- `js/lifecycle.js` - Livewire/Alpine boot process, `interceptInit` callback, `Alpine.start()`
+- `js/component.js` - Component constructor, `processEffects()`
+- `js/store.js` - `initComponent()`, component registry
+- `js/$wire.js` - Existing `$js` pending asset handling (lines 165-193)
+- `js/features/supportMorphDom.js` - Morph trigger via `interceptMessage` + `onMorph`
+- `js/features/supportScriptsAndAssets.js` - How `@script`/`@endscript` works (synchronous, no race condition)
+- `js/morph.js` - DOM morphing implementation
+- `js/request/index.js` - Request lifecycle (lines 404-458: success handler, hook ordering)
+- `js/request/message.js` - Message lifecycle hooks (`invokeOnMorph` uses `Promise.all`)
+ succeeded in 51ms:
+# Expert Recommendations: Implementation Plan
+
+**Agents consulted:** claude-opus, codex-5.3-high, gemini-2.5-pro, gemini-3-pro
+
+## Consensus
+
+All four agree on the core approach: **Idea B (deferred init) as the safety net + Idea A (pre-import) for initial load + a morph delay mechanism for scenarios 2 and 3.** The build order is also unanimous: **B first** (stops crashes immediately), then the morph delay, then A (polish).
+
+All agree `<link rel="modulepreload">` should be deferred as an enhancement.
+
+## The Split: Morph Delay Hook
+
+**Team `onPrepare` (Option E) — claude-opus, codex-5.3-high, gemini-2.5-pro:**
+- Add a new `onPrepare` hook between `onSync` and `processEffects`
+- Preserves `wire:loading` correctly (loading clears in `onEffect`, which runs *after* modules have already loaded in `onPrepare`)
+- Codex specifically calls out Option D (awaitable `onSync`) as "changing existing hook semantics unnecessarily"
+
+**Team `onBeforeMorph` (Option C) — gemini-3-pro:**
+- Adds hook between `onEffect` and `onMorph`
+- Acknowledges the `wire:loading` gap but says "accept it for V1, it's better than broken content"
+
+thinking
+**Planning parallel file reads**
+codex
+I’ve finished the research docs and now I’m grounding the recommendation in code paths and hook ordering. I’ll read the listed Livewire files first, then Alpine lifecycle internals.
+exec
+/bin/zsh -lc 'nl -ba js/features/supportJsModules.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/request/index.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/lifecycle.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/request/interceptor.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/request/message.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+     1	import { on } from '@/hooks'
+     2	import { getModuleUrl } from '@/utils'
+     3	
+     4	let pendingComponentAssets = new WeakMap()
+     5	
+     6	on('effect', ({ component, effects }) => {
+     7	    let scriptModuleHash = effects.scriptModule
+     8	
+     9	    if (scriptModuleHash) {
+    10	        let encodedName = component.name.replace(/\./g, '--').replace(/::/g, '---').replace(/:/g, '----')
+    11	        let path = `${getModuleUrl()}/js/${encodedName}.js?v=${scriptModuleHash}`
+    12	
+    13	        pendingComponentAssets.set(component, Alpine.reactive({
+    14	            loading: true,
+    15	            afterLoaded: [],
+    16	        }))
+    17	
+    18	        import(/* @vite-ignore */ path).then(module => {
+    19	            module.run.call(component.$wire, component.$wire, component.$wire.js);
+    20	
+ succeeded in 51ms:
+     1	import { getCsrfToken, contentIsFromDump, splitDumpFromContent, getUpdateUri } from '@/utils'
+     2	import { coordinateNetworkInteractions } from './interactions.js'
+     3	import { MessageRequest, PageRequest } from './request.js'
+     4	import { InterceptorRegistry } from './interceptor.js'
+     5	import { trigger, triggerAsync } from '@/hooks.js'
+     6	import { showHtmlModal } from '@/utils/modal.js'
+     7	import { MessageBus, scopeSymbolFromMessage } from './messageBus.js'
+     8	import Message from './message.js'
+     9	import Action from './action.js'
+    10	
+    11	let outstandingActionOrigin = null
+    12	let outstandingActionMetadata = {}
+    13	let outstandingActionInterceptors = []
+    14	let interceptors = new InterceptorRegistry
+    15	let messageBus = new MessageBus()
+    16	let actionInterceptors = []
+    17	let partitionInterceptors = []
+    18	
+    19	export function setNextActionOrigin(origin) {
+    20	    outstandingActionOrigin = origin
+ succeeded in 52ms:
+     1	import { findComponentByEl, destroyComponent, initComponent, hasComponent } from './store'
+     2	import { matchesForLivewireDirective, extractDirective } from './directives'
+     3	import { trigger } from './hooks'
+     4	import collapse from '@alpinejs/collapse'
+     5	import focus from '@alpinejs/focus'
+     6	import persist from '@alpinejs/persist'
+     7	import intersect from '@alpinejs/intersect'
+     8	import sort from '@alpinejs/sort'
+     9	import resize from '@alpinejs/resize'
+    10	import anchor from '@alpinejs/anchor'
+    11	import navigate from './plugins/navigate'
+    12	import history from './plugins/history'
+    13	import morph from '@alpinejs/morph'
+    14	import mask from '@alpinejs/mask'
+    15	import Alpine from 'alpinejs'
+    16	import { dispatch } from './utils'
+    17	
+    18	export function start() {
+    19	    setTimeout(() => ensureLivewireScriptIsntMisplaced())
+    20	
+ succeeded in 51ms:
+     1	import { WeakBag } from "@/utils"
+     2	
+     3	export class MessageInterceptor {
+     4	    onSend = () => {}
+     5	    onCancel = () => {}
+     6	    onFailure = () => {}
+     7	    onError = () => {}
+     8	    onStream = () => {}
+     9	    onSuccess = () => {}
+    10	    onFinish = () => {}
+    11	    onSync = () => {}
+    12	    onEffect = () => {}
+    13	    onMorph = async () => {}
+    14	    onRender = () => {}
+    15	
+    16	    constructor(message, callback) {
+    17	        this.message = message
+    18	        this.callback = callback
+    19	
+    20	        this.callback({
+ succeeded in 51ms:
+     1	import { MessageInterceptor } from "./interceptor"
+     2	
+     3	export default class Message {
+     4	    actions = new Set()
+     5	    snapshot = null
+     6	    updates = null
+     7	    calls = null
+     8	    payload = null
+     9	    responsePayload = null
+    10	    pendingReturns = []
+    11	    pendingReturnsMeta = {}
+    12	    interceptors = []
+    13	    cancelled = false
+    14	    request = null
+    15	    _scope = null
+    16	
+    17	    // Ensure scope isn't accessed until it's been set...
+    18	    get scope() {
+    19	        if (! this._scope) {
+    20	            throw new Error('Message scope has not been set yet')
+
+thinking
+**Planning deeper Livewire support inspection**
+exec
+/bin/zsh -lc 'nl -ba js/features/supportMorphDom.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/directives/wire-loading.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc "nl -ba 'js/"'$wire.js'"'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/features/supportPreserveScroll.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/features/index.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/features/supportIslands.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+     1	import { morph } from "@/morph";
+     2	import { interceptMessage } from "@/request";
+     3	
+     4	interceptMessage(({ message, onSuccess }) => {
+     5	    onSuccess(({ payload, onMorph }) => {
+     6	        onMorph(async () => {
+     7	            let html = payload.effects.html
+     8	
+     9	            if (! html) return
+    10	
+    11	            await morph(message.component, message.component.el, html)
+    12	        })
+    13	    })
+    14	})
+ succeeded in 51ms:
+     1	import { toggleBooleanStateDirective } from './shared'
+     2	import { directive, getDirectives } from "@/directives"
+     3	import { closestIsland } from '@/features/supportIslands'
+     4	import { interceptMessage } from '@/request'
+     5	import { listen } from '@/utils'
+     6	
+     7	directive('loading', ({ el, directive, component, cleanup }) => {
+     8	    let { targets, inverted } = getTargets(el)
+     9	
+    10	    let [delay, abortDelay] = applyDelay(directive)
+    11	
+    12	    let cleanupA = whenTargetsArePartOfRequest(component, el, targets, inverted, [
+    13	        () => delay(() => toggleBooleanStateDirective(el, directive, true)),
+    14	        () => abortDelay(() => toggleBooleanStateDirective(el, directive, false)),
+    15	    ])
+    16	
+    17	    let cleanupB = whenTargetsArePartOfFileUpload(component, targets, [
+    18	        () => delay(() => toggleBooleanStateDirective(el, directive, true)),
+    19	        () => abortDelay(() => toggleBooleanStateDirective(el, directive, false)),
+    20	    ])
+ succeeded in 50ms:
+     1	import { cancelUpload, removeUpload, upload, uploadMultiple } from './features/supportFileUploads'
+     2	import { dispatch, dispatchEl, dispatchRef, dispatchSelf, dispatchTo, listen } from '@/events'
+     3	import { generateEntangleFunction } from '@/features/supportEntangle'
+     4	import { findComponentByEl } from '@/store'
+     5	import { dataGet, dataSet } from '@/utils'
+     6	import Alpine from 'alpinejs'
+     7	import { on as hook } from './hooks'
+     8	import { fireAction, setNextActionMetadata, interceptComponentAction, interceptComponentMessage, interceptComponentRequest } from '@/request'
+     9	import { getErrorsObject } from '@/features/supportErrors'
+    10	import { findRefEl } from '@/features/supportRefs'
+    11	import { checkDirty } from './directives/wire-dirty'
+    12	import { assetIsPendingFor, runAfterAssetIsLoadedFor } from './features/supportJsModules'
+    13	
+    14	let properties = {}
+    15	let fallback
+    16	
+    17	function wireProperty(name, callback, component = null) {
+    18	    properties[name] = callback
+    19	}
+    20	
+ succeeded in 52ms:
+     1	import { closestFragment, extractFragmentMetadataFromHtml, extractInnerHtmlFromFragmentHtml, findFragment } from '@/fragment'
+     2	import { interceptAction, interceptMessage } from '@/request'
+     3	import { morphFragment } from '@/morph'
+     4	
+     5	interceptAction(({ action }) => {
+     6	    let origin = action.origin
+     7	
+     8	    if (! origin) return
+     9	
+    10	    let { el, directive } = origin
+    11	
+    12	    // Check for wire:island with modifiers (e.g., wire:island.append="foo")
+    13	    let islandAttr = Array.from(el.attributes).find(attr => attr.name.startsWith('wire:island'))
+    14	
+    15	    if (islandAttr) {
+    16	        let islandName = islandAttr.value
+    17	
+    18	        // Parse modifiers from attribute name (e.g., "wire:island.append" -> ["append"])
+    19	        let attrParts = islandAttr.name.split('.')
+    20	        let isPrepend = attrParts.includes('prepend')
+ succeeded in 52ms:
+     1	import { interceptMessage } from '@/request'
+     2	
+     3	interceptMessage(({ message, onSuccess }) => {
+     4	    onSuccess(({ onSync, onMorph, onRender }) => {
+     5	        message.actions.forEach(action => {
+     6	            let origin = action.origin
+     7	
+     8	            if (! origin || ! origin.directive) return
+     9	
+    10	            let directive = origin.directive
+    11	
+    12	            if (! directive.modifiers.includes('preserve-scroll')) return
+    13	
+    14	            let oldHeight
+    15	            let oldScroll
+    16	
+    17	            onSync(() => {
+    18	                oldHeight = document.body.scrollHeight
+    19	                oldScroll = window.scrollY
+    20	            })
+ succeeded in 52ms:
+     1	/**
+     2	 * Features where order matters:
+     3	 */
+     4	import './supportListeners';
+     5	import './supportScriptsAndAssets';
+     6	import './supportJsEvaluation';
+     7	import './supportMorphDom';
+     8	import './supportDispatches';
+     9	
+    10	/**
+    11	 * Features where order does NOT matter:
+    12	 */
+    13	import './supportDisablingFormsDuringRequest';
+    14	import './supportFileDownloads';
+    15	import './supportFileUploads';
+    16	import './supportQueryString';
+    17	import './supportLaravelEcho';
+    18	import './supportStreaming';
+    19	import './supportRedirects';
+    20	import './supportIslands';
+
+thinking
+**Planning Alpine source review**
+codex
+I’ve confirmed the Livewire hook timing in code, including `wire:loading` clearing on `onEffect` before morph. I’m now reading Alpine’s `initTree` and directive internals to choose the exact defer mechanism (`_x_ignore`, `deferInit`, or promise-based `_x_defer`).
+exec
+/bin/zsh -lc 'nl -ba ../alpine/packages/alpinejs/src/lifecycle.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba ../alpine/packages/alpinejs/src/datas.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba ../alpine/packages/alpinejs/src/directives/x-data.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba ../alpine/packages/alpinejs/src/mutation.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba ../alpine/packages/alpinejs/src/directives.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+     1	import { directive, prefix } from '../directives'
+     2	import { initInterceptors } from '../interceptor'
+     3	import { injectDataProviders } from '../datas'
+     4	import { addRootSelector } from '../lifecycle'
+     5	import { interceptClone, isCloning, isCloningLegacy } from '../clone'
+     6	import { addScopeToNode } from '../scope'
+     7	import { injectMagics, magic } from '../magics'
+     8	import { reactive } from '../reactivity'
+     9	import { evaluate } from '../evaluator'
+    10	
+    11	addRootSelector(() => `[${prefix('data')}]`)
+    12	
+    13	directive('data', ((el, { expression }, { cleanup }) => {
+    14	    if (shouldSkipRegisteringDataDuringClone(el)) return
+    15	
+    16	    expression = expression === '' ? '{}' : expression
+    17	
+    18	    let magicContext = {}
+    19	    injectMagics(magicContext, el)
+    20	
+ succeeded in 52ms:
+     1	
+     2	let datas = {}
+     3	
+     4	export function data(name, callback) {
+     5	    datas[name] = callback
+     6	}
+     7	
+     8	export function injectDataProviders(obj, context) {
+     9	    Object.entries(datas).forEach(([name, callback]) => {
+    10	        Object.defineProperty(obj, name, {
+    11	            get() {
+    12	                return (...args) => {
+    13	                    return callback.bind(context)(...args)
+    14	                }
+    15	            },
+    16	
+    17	            enumerable: false,
+    18	        })
+    19	    })
+    20	
+ succeeded in 52ms:
+     1	import { startObservingMutations, onAttributesAdded, onElAdded, onElRemoved, cleanupAttributes, cleanupElement } from "./mutation"
+     2	import { deferHandlingDirectives, directiveExists, directives } from "./directives"
+     3	import { dispatch } from './utils/dispatch'
+     4	import { walk } from "./utils/walk"
+     5	import { warn } from './utils/warn'
+     6	
+     7	let started = false
+     8	
+     9	export function start() {
+    10	    if (started) warn('Alpine has already been initialized on this page. Calling Alpine.start() more than once can cause problems.')
+    11	
+    12	    started = true
+    13	
+    14	    if (! document.body) warn('Unable to initialize. Trying to load Alpine before `<body>` is available. Did you forget to add `defer` in Alpine\'s `<script>` tag?')
+    15	
+    16	    dispatch(document, 'alpine:init')
+    17	    dispatch(document, 'alpine:initializing')
+    18	
+    19	    startObservingMutations()
+    20	
+ succeeded in 52ms:
+     1	import { dequeueJob } from "./scheduler";
+     2	let onAttributeAddeds = []
+     3	let onElRemoveds = []
+     4	let onElAddeds = []
+     5	
+     6	export function onElAdded(callback) {
+     7	    onElAddeds.push(callback)
+     8	}
+     9	
+    10	export function onElRemoved(el, callback) {
+    11	    if (typeof callback === 'function') {
+    12	        if (! el._x_cleanups) el._x_cleanups = []
+    13	        el._x_cleanups.push(callback)
+    14	    } else {
+    15	        callback = el
+    16	        onElRemoveds.push(callback)
+    17	    }
+    18	}
+    19	
+    20	export function onAttributesAdded(callback) {
+ succeeded in 51ms:
+     1	import { onAttributeRemoved, onElRemoved } from './mutation'
+     2	import { evaluate, evaluateLater } from './evaluator'
+     3	import { elementBoundEffect } from './reactivity'
+     4	import Alpine from './alpine'
+     5	
+     6	let prefixAsString = 'x-'
+     7	
+     8	export function prefix(subject = '') {
+     9	    return prefixAsString + subject
+    10	}
+    11	
+    12	export function setPrefix(newPrefix) {
+    13	    prefixAsString = newPrefix
+    14	}
+    15	
+    16	let directiveHandlers = {}
+    17	
+    18	export function directive(name, callback) {
+    19	    directiveHandlers[name] = callback
+    20	
+
+thinking
+**Inspecting Alpine transaction usage**
+codex
+I have the core Alpine internals now. I’m doing a targeted check for `Alpine.transaction` behavior and any other code paths that could bypass morph-delay timing (especially islands/append-prepend).
+exec
+/bin/zsh -lc 'nl -ba js/morph.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc "rg -n \"transaction\\s*\\(\" ../alpine/packages/alpinejs/src js | sed -n '1,200p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/features/supportScriptsAndAssets.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/plugins/navigate/index.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc "rg -n \"inscribeSnapshotAndEffectsOnElement|scriptModule|wire:effects\" js/plugins/navigate -S | sed -n '1,200p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 50ms:
+     1	import { trigger } from "@/hooks"
+     2	import { findComponentByEl } from "@/store"
+     3	import Alpine from 'alpinejs'
+     4	import { extractFragmentMetadataFromMarkerNode, isEndFragmentMarker, isStartFragmentMarker } from "./fragment"
+     5	import { transitionDomMutation } from "./directives/wire-transition"
+     6	
+     7	export async function morph(component, el, html) {
+     8	    let wrapperTag = el.parentElement
+     9	        // If the root element is a "tr", we need the wrapper to be a "table"...
+    10	        ? el.parentElement.tagName.toLowerCase()
+    11	        : 'div'
+    12	
+    13	    let customElement = customElements.get(wrapperTag)
+    14	
+    15	    // If the wrapper tag is a custom element, we can't instantiate it using the hyphenated
+    16	    // tag name, so we need to get the name off the custom element instead...
+    17	    wrapperTag = customElement ? customElement.name : wrapperTag
+    18	
+    19	    let wrapper = document.createElement(wrapperTag)
+    20	
+ succeeded in 52ms:
+../alpine/packages/alpinejs/src/alpine.js:29:    get transaction() { return transaction },
+js/request/index.js:426:                            Alpine.transaction(async () => {
+../alpine/packages/alpinejs/src/reactivity.js:100:export async function transaction(callback) {
+ succeeded in 51ms:
+     1	import { on } from '@/hooks'
+     2	import Alpine from 'alpinejs'
+     3	import { evaluateExpression } from '../evaluator'
+     4	
+     5	let executedScripts = new WeakMap
+     6	
+     7	let executedAssets = new Set
+     8	
+     9	on('payload.intercept', async ({ assets }) => {
+    10	    if(! assets) return
+    11	
+    12	    for (let [key, asset] of Object.entries(assets)) {
+    13	        await onlyIfAssetsHaventBeenLoadedAlreadyOnThisPage(key, async () => {
+    14	            await addAssetsToHeadTagOfPage(asset)
+    15	        })
+    16	    }
+    17	})
+    18	
+    19	// Assets that were injected into the HTML need to be registered so that
+    20	// they aren't loaded again...
+ succeeded in 51ms:
+     1	import { replaceUrl, updateCurrentPageHtmlInHistoryStateForLaterBackButtonClicks, updateCurrentPageHtmlInSnapshotCacheForLaterBackButtonClicks, updateUrlAndStoreLatestHtmlForFutureBackButtons, whenTheBackOrForwardButtonIsClicked } from "./history"
+     2	import { getPretchedHtmlOr, prefetchHtml, storeThePrefetchedHtmlForWhenALinkIsClicked } from "./prefetch"
+     3	import { createUrlObjectFromString, extractDestinationFromLink, whenThisLinkIsHoveredFor, whenThisLinkIsPressed } from "./links"
+     4	import { isTeleportTarget, packUpPersistedTeleports, removeAnyLeftOverStaleTeleportTargets, unPackPersistedTeleports } from "./teleport"
+     5	import { restoreScrollPositionOrScrollToTop, storeScrollInformationInHtmlBeforeNavigatingAway } from "./scroll"
+     6	import { isPersistedElement, putPersistantElementsBack, storePersistantElementsForLater } from "./persist"
+     7	import { finishAndHideProgressBar, removeAnyLeftOverStaleProgressBars, showAndStartProgressBar } from "./bar"
+     8	import { packUpPersistedPopovers, unPackPersistedPopovers } from "./popover"
+     9	import { swapCurrentPageWithNewHtml } from "./page"
+    10	import { fetchHtml } from "./fetch"
+    11	
+    12	let enablePersist = true
+    13	let showProgressBar = true
+    14	let restoreScroll = true
+    15	let autofocus = false
+    16	
+    17	export default function (Alpine) {
+    18	
+    19	    Alpine.navigate = (url, options = {}) => {
+    20	        let { preserveScroll = false } = options
+ succeeded in 52ms:
+
+
+thinking
+**Expanding search scope globally**
+exec
+/bin/zsh -lc "rg -n \"inscribeSnapshotAndEffectsOnElement|wire:effects|scriptModule\" js -S | sed -n '1,240p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+js/component.js:31:        this.effects = JSON.parse(el.getAttribute('wire:effects'))
+js/component.js:283:    inscribeSnapshotAndEffectsOnElement() {
+js/component.js:303:        el.setAttribute('wire:effects', JSON.stringify(effects))
+js/features/supportJsModules.js:7:    let scriptModuleHash = effects.scriptModule
+js/features/supportJsModules.js:9:    if (scriptModuleHash) {
+js/features/supportJsModules.js:11:        let path = `${getModuleUrl()}/js/${encodedName}.js?v=${scriptModuleHash}`
+js/morph.js:39:    to.setAttribute('wire:effects', JSON.stringify(effects))
+js/directives/wire-navigate.js:45:        component.inscribeSnapshotAndEffectsOnElement()
+
+thinking
+**Inspecting navigation and inscription components**
+codex
+I found the navigate snapshot reinsertion path and I’m checking it directly, since it affects whether `scriptModule` survives history restores and `$js` behavior.
+exec
+/bin/zsh -lc "nl -ba js/component.js | sed -n '220,380p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc "nl -ba js/component.js | sed -n '1,220p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewireexec
+/bin/zsh -lc 'nl -ba js/directives/wire-navigate.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+   220	    }
+   221	
+   222	    get isIsolated() {
+   223	        return this.snapshot.memo.isolate
+   224	    }
+   225	
+   226	    get isLazy() {
+   227	        return this.snapshot.memo.lazyLoaded !== undefined
+   228	    }
+   229	
+   230	    get hasBeenLazyLoaded() {
+   231	        return this.snapshot.memo.lazyLoaded === true
+   232	    }
+   233	
+   234	    get isLazyIsolated() {
+   235	        return !! this.snapshot.memo.lazyIsolated
+   236	    }
+   237	
+   238	    getDeepChildrenWithBindings(callback) {
+   239	        this.getDeepChildren(child => {
+ succeeded in 52ms:
+     1	import { dataGet, dataSet, dataDelete, deepClone, diff, diffAndConsolidate, extractData} from '@/utils'
+     2	import { generateWireObject } from '@/$wire'
+     3	import { findComponentByEl, findComponent, hasComponent } from '@/store'
+     4	import { trigger } from '@/hooks'
+     5	import { setNextActionOrigin } from '@/request'
+     6	
+     7	export class Component {
+     8	    constructor(el) {
+     9	        if (el.__livewire) throw 'Component already initialized';
+    10	
+    11	        el.__livewire = this
+    12	
+    13	        this.el = el
+    14	
+    15	        this.id = el.getAttribute('wire:id')
+    16	
+    17	        this.key = el.getAttribute('wire:key')
+    18	
+    19	        this.__livewireId = this.id // @legacy
+    20	
+ succeeded in 51ms:
+     1	import Alpine from 'alpinejs'
+     2	
+     3	// Export all wire:navigate variations for use in other files
+     4	export let wireNavigateSelectors = [
+     5	    '[wire\\:navigate]',
+     6	    '[wire\\:navigate\\.hover]',
+     7	    '[wire\\:navigate\\.preserve-scroll]',
+     8	    '[wire\\:navigate\\.preserve-scroll\\.hover]',
+     9	    '[wire\\:navigate\\.hover\\.preserve-scroll]',
+    10	]
+    11	
+    12	// Combined selector for querying all wire:navigate elements
+    13	export let wireNavigateSelector = wireNavigateSelectors.join(', ')
+    14	
+    15	// Attribute to Alpine directive mapping
+    16	let attributeMap = {
+    17	    'wire:navigate': 'x-navigate',
+    18	    'wire:navigate.hover': 'x-navigate.hover',
+    19	    'wire:navigate.preserve-scroll': 'x-navigate.preserve-scroll',
+    20	    'wire:navigate.preserve-scroll.hover': 'x-navigate.preserve-scroll.hover',
+
+thinking
+**Inspecting Alpine reactivity file**
+exec
+/bin/zsh -lc "nl -ba ../alpine/packages/alpinejs/src/reactivity.js | sed -n '1,220p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+     1	
+     2	import { scheduler, startTransaction as startTx, commitTransaction as commitTx } from './scheduler'
+     3	
+     4	let reactive, effect, release, raw
+     5	
+     6	let shouldSchedule = true
+     7	export function disableEffectScheduling(callback) {
+     8	    shouldSchedule = false
+     9	
+    10	    callback()
+    11	
+    12	    shouldSchedule = true
+    13	}
+    14	
+    15	export function setReactivityEngine(engine) {
+    16	    reactive = engine.reactive
+    17	    release = engine.release
+    18	    effect = (callback) => engine.effect(callback, { scheduler: task => {
+    19	        if (shouldSchedule) {
+    20	            scheduler(task)
+
+thinking
+**Analyzing lifecycle interceptInit and skipDuringClone**
+exec
+/bin/zsh -lc "nl -ba ../alpine/packages/alpinejs/src/clone.js | sed -n '1,220p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+     1	import { effect, release, overrideEffect } from "./reactivity"
+     2	import { initTree, isRoot } from "./lifecycle"
+     3	import { walk } from "./utils/walk"
+     4	
+     5	export let isCloning = false
+     6	
+     7	export function skipDuringClone(callback, fallback = () => {}) {
+     8	    return (...args) => isCloning ? fallback(...args) : callback(...args)
+     9	}
+    10	
+    11	export function onlyDuringClone(callback) {
+    12	    return (...args) => isCloning && callback(...args)
+    13	}
+    14	
+    15	let interceptors = []
+    16	
+    17	export function interceptClone(callback) {
+    18	    interceptors.push(callback)
+    19	}
+    20	
+
+thinking
+**Evaluating payload intercept hook**
+exec
+/bin/zsh -lc "nl -ba js/store.js | sed -n '1,240p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+     1	import { Component } from "@/component";
+     2	import { trigger } from "@/hooks";
+     3	import { walkBackwards, walkUpwards } from "./utils";
+     4	import { extractFragmentMetadataFromMarkerNode, isEndFragmentMarker, isStartFragmentMarker } from "./fragment";
+     5	
+     6	let components = {}
+     7	
+     8	export function initComponent(el) {
+     9	    let component = new Component(el)
+    10	
+    11	    if (components[component.id]) throw 'Component already registered'
+    12	
+    13	    let cleanup = (i) => component.addCleanup(i)
+    14	
+    15	    trigger('component.init', { component, cleanup })
+    16	
+    17	    components[component.id] = component
+    18	
+    19	    return component
+    20	}
+
+thinking
+**Planning API inspection**
+exec
+/bin/zsh -lc "rg -n \"onSync|onEffect|onMorph|interceptMessage|message hook|onPrepare\" docs js -S | sed -n '1,260p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+js/$wire.js:48:    'interceptMessage': '$interceptMessage',
+js/$wire.js:250:wireProperty('$interceptMessage', (component) => (actionNameOrCallback, maybeCallback) => {
+js/index.js:7:import { fireAction, interceptAction, interceptMessage, interceptRequest } from '@/request'
+js/index.js:14:    interceptMessage: (callback) => interceptMessage(callback),
+js/request/interceptor.js:11:    onSync = () => {}
+js/request/interceptor.js:12:    onEffect = () => {}
+js/request/interceptor.js:13:    onMorph = async () => {}
+docs/javascript.md:135:$wire.interceptMessage(callback)              // Messages from this component
+docs/javascript.md:136:$wire.interceptMessage('save', callback)      // Only when message contains 'save'
+docs/javascript.md:137:Livewire.interceptMessage(callback)           // Global (all components)
+docs/javascript.md:192:$wire.interceptMessage(({ message, cancel, onSend, onCancel, onSuccess, onError, onFailure, onStream, onFinish }) => {
+docs/javascript.md:203:    onSuccess(({ payload, onSync, onEffect, onMorph, onRender }) => {
+docs/javascript.md:206:        onSync(() => {})    // After state synced
+docs/javascript.md:207:        onEffect(() => {})  // After effects processed
+docs/javascript.md:208:        onMorph(async () => {})   // After DOM morphed (must be async)
+docs/javascript.md:233:2. `onSync` - After state merged
+docs/javascript.md:234:3. `onEffect` - After effects processed
+docs/javascript.md:235:4. `onMorph` - After DOM morphed
+docs/javascript.md:662:Livewire.interceptMessage(({ onSend }) => {
+docs/javascript.md:854:    // Usage: $wire.interceptMessage(({ message, cancel, onSend, onCancel, onSuccess, onError, onFailure, onFinish }) => { ... })
+
+thinking
+**Reviewing hook semantics**
+exec
+/bin/zsh -lc "nl -ba docs/javascript.md | sed -n '180,260p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+   180	
+   181	    onFinish(() => {
+   182	        // Runs after DOM morph completes (or on error/cancel)
+   183	    })
+   184	})
+   185	```
+   186	
+   187	### Message interceptors
+   188	
+   189	Message interceptors fire for each component update. A message contains one or more actions.
+   190	
+   191	```js
+   192	$wire.interceptMessage(({ message, cancel, onSend, onCancel, onSuccess, onError, onFailure, onStream, onFinish }) => {
+   193	    // message.component  - Component instance
+   194	    // message.actions    - Set of actions in this message
+   195	    // cancel()           - Cancel this message
+   196	
+   197	    onSend(({ payload }) => {
+   198	        // payload: { snapshot, updates, calls }
+   199	    })
+
+thinking
+**Inspecting callback timing semantics**
+exec
+/bin/zsh -lc "rg -n \"payload\\.intercept|hook\\('payload\\.intercept|payload intercept\" docs js -S | sed -n '1,200p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+js/request/index.js:407:                await triggerAsync('payload.intercept', responseJson)
+js/features/supportScriptsAndAssets.js:9:on('payload.intercept', async ({ assets }) => {
+
+thinking
+**Identifying internal hook use**
+exec
+/bin/zsh -lc 'nl -ba js/hooks.js' in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+     1	import { isFunction } from '@/utils'
+     2	
+     3	/**
+     4	 * Our internal event listener bus...
+     5	 */
+     6	let listeners = []
+     7	
+     8	/**
+     9	 * Register a callback to run when an event is triggered...
+    10	 */
+    11	export function on(name, callback) {
+    12	    if (! listeners[name]) listeners[name] = []
+    13	
+    14	    listeners[name].push(callback)
+    15	
+    16	    // Return an "off" callback to remove the listener...
+    17	    return () => {
+    18	        listeners[name] = listeners[name].filter(i => i !== callback)
+    19	    }
+    20	}
+
+thinking
+**Assessing module URL handling**
+exec
+/bin/zsh -lc "rg -n \"function getModuleUrl|getModuleUrl\\(\" js/utils.js js -S | sed -n '1,120p'; nl -ba js/utils.js | sed -n '1,120p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 51ms:
+js/utils.js:422:export function getModuleUrl() {
+js/utils.js:422:export function getModuleUrl() {
+js/features/supportCssModules.js:10:        let path = `${getModuleUrl()}/css/${encodedName}.css?v=${effects.styleModule}`
+js/features/supportCssModules.js:21:        let path = `${getModuleUrl()}/css/${encodedName}.global.css?v=${effects.globalStyleModule}`
+js/features/supportJsModules.js:11:        let path = `${getModuleUrl()}/js/${encodedName}.js?v=${scriptModuleHash}`
+     1	
+     2	export class Bag {
+     3	    constructor() { this.arrays = {} }
+     4	
+     5	    add(key, value) {
+     6	        if (! this.arrays[key]) this.arrays[key] = []
+     7	        this.arrays[key].push(value)
+     8	    }
+     9	
+    10	    remove(key) {
+    11	        if (this.arrays[key]) delete this.arrays[key]
+    12	    }
+    13	
+    14	    get(key) { return this.arrays[key] || [] }
+    15	
+
+thinking
+**Noting potential code location**
+exec
+/bin/zsh -lc "nl -ba js/utils.js | sed -n '390,470p'" in /Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire succeeded in 52ms:
+   390	    }
+   391	
+   392	    throw 'Livewire: No CSRF token detected'
+   393	}
+   394	
+   395	let nonce;
+   396	
+   397	export function getNonce() {
+   398	    if (nonce) return nonce
+   399	
+   400	
+   401	    if (window.livewireScriptConfig && (window.livewireScriptConfig['nonce'] ?? false)) {
+   402	        nonce = window.livewireScriptConfig['nonce']
+   403	
+   404	        return nonce
+   405	    }
+   406	
+   407	    let elWithNonce = document.querySelector('style[data-livewire-style][nonce]')
+   408	
+   409	    if (elWithNonce) {
+
+thinking
+**Recommending payload intercept approach**
+codex
+**Ultimate Path**
+Build this in Livewire only, with no Alpine API changes:
+
+1. In [supportJsModules.js](/Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire/js/features/supportJsModules.js), create one shared module loader/cache keyed by `componentName + hash`, with per-module `catch` + `console.warn` + continue.
+2. In that same file, add an async `payload.intercept` listener that parses incoming `effects.html` (and `effects.islandFragments`) via `<template>`, discovers nested `[wire:id]` components, preloads all referenced modules, and `await`s them (`Promise.allSettled`).
+3. Keep existing component-level pending tracking for `$js` (`assetIsPendingFor` / `runAfterAssetIsLoadedFor`) and wire it to the same loader.
+4. In [lifecycle.js](/Users/josh/tend/workspaces/livewire-alpine-data/packages/livewire/js/lifecycle.js), add Idea B safety net using `_x_ignore + skip() + re-init` when a component asset is pending, plus `el.isConnected` guard and `destroyComponent(component.id)` if detached before resume.
+
+**Direct Answers**
+1. Exact combination: Livewire changes above only; Alpine unchanged.
+2. Idea B mechanism: use `_x_ignore` directly (Approach 3).
+3. Morph delay: use neither `onPrepare` nor awaitable `onSync`; use existing awaited `payload.intercept` phase to preload before `processEffects`.
+4. Idea A (`pre-import before Alpine.start()`): not worth shipping in the core fix. Keep as optional perf polish later if you want to remove initial-load FOUC.
+5. Simpler approach missed: yes, the existing awaited `payload.intercept` hook is the cleanest place to do morph-time module preloading without adding/changing lifecycle hooks.
+
+**Build Order**
+1. `supportJsModules` loader/cache + error handling + `payload.intercept` preloading.
+2. `lifecycle` deferred-init safety net.
+3. Tests: initial load, lazy load, dynamic child insert, navigate restore, island append/prepend, import failure, detached-before-resume.
+tokens used
+88,502

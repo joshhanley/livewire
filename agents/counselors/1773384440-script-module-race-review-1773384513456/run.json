@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-03-13T06:59:30.654Z",
+  "slug": "1773384440-script-module-race-review",
+  "prompt": "file:prompt.md",
+  "promptSource": "file",
+  "readOnlyPolicy": "bestEffort",
+  "tools": [
+    {
+      "toolId": "claude-opus",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 167849,
+      "wordCount": 2059,
+      "outputFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/claude-opus.md",
+      "stderrFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/claude-opus.stderr"
+    },
+    {
+      "toolId": "codex-5.3-high",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 657194,
+      "wordCount": 501,
+      "outputFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/codex-5.3-high.md",
+      "stderrFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/codex-5.3-high.stderr"
+    },
+    {
+      "toolId": "gemini-2.5-pro",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 71478,
+      "wordCount": 1274,
+      "outputFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/gemini-2.5-pro.md",
+      "stderrFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/gemini-2.5-pro.stderr"
+    },
+    {
+      "toolId": "gemini-3-pro",
+      "status": "error",
+      "exitCode": 1,
+      "durationMs": 30366,
+      "wordCount": 0,
+      "outputFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/gemini-3-pro.md",
+      "stderrFile": "agents/counselors/1773384440-script-module-race-review-1773384513456/gemini-3-pro.stderr",
+      "error": "Loaded cached credentials.\nIgnored 2 files:\nGit-ignored: node_modules/alpinejs/src/lifecycle.js, node_modules/alpinejs/src/directives/x-data.js\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 4s.. Retrying after 4095.285032ms...\nAttempt 2 failed with status 429. Retrying with backoff... GaxiosError: [{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"No capacity available for model gemini-3-pro-preview on the server\",\n    \"errors\": [\n      {\n        \"me"
+    }
+  ]
+}

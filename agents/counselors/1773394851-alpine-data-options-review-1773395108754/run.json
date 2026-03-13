@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-03-13T09:51:28.804Z",
+  "slug": "1773394851-alpine-data-options-review",
+  "prompt": "file:prompt.md",
+  "promptSource": "file",
+  "readOnlyPolicy": "bestEffort",
+  "tools": [
+    {
+      "toolId": "claude-opus",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 275839,
+      "wordCount": 1227,
+      "outputFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/claude-opus.md",
+      "stderrFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/claude-opus.stderr"
+    },
+    {
+      "toolId": "codex-5.3-high",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 380045,
+      "wordCount": 334,
+      "outputFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/codex-5.3-high.md",
+      "stderrFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/codex-5.3-high.stderr"
+    },
+    {
+      "toolId": "gemini-2.5-pro",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 66314,
+      "wordCount": 926,
+      "outputFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/gemini-2.5-pro.md",
+      "stderrFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/gemini-2.5-pro.stderr"
+    },
+    {
+      "toolId": "gemini-3-pro",
+      "status": "error",
+      "exitCode": 1,
+      "durationMs": 76022,
+      "wordCount": 24,
+      "outputFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/gemini-3-pro.md",
+      "stderrFile": "agents/counselors/1773394851-alpine-data-options-review-1773395108754/gemini-3-pro.stderr",
+      "error": "Loaded cached credentials.\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 4s.. Retrying after 4791.628955ms...\nAttempt 1 failed with status 429. Retrying with backoff... GaxiosError: [{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"No capacity available for model gemini-3-pro-preview on the server\",\n    \"errors\": [\n      {\n        \"message\": \"No capacity available for model gemini-3-pro-preview on the server\",\n        \"domain\": \"global\",\n        \"re"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-03-13T08:13:45.861Z",
+  "slug": "1773389021-final-solution",
+  "prompt": "file:prompt.md",
+  "promptSource": "file",
+  "readOnlyPolicy": "bestEffort",
+  "tools": [
+    {
+      "toolId": "claude-opus",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 298641,
+      "wordCount": 807,
+      "outputFile": "agents/counselors/1773389021-final-solution-1773389082176/claude-opus.md",
+      "stderrFile": "agents/counselors/1773389021-final-solution-1773389082176/claude-opus.stderr"
+    },
+    {
+      "toolId": "codex-5.3-high",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 302510,
+      "wordCount": 228,
+      "outputFile": "agents/counselors/1773389021-final-solution-1773389082176/codex-5.3-high.md",
+      "stderrFile": "agents/counselors/1773389021-final-solution-1773389082176/codex-5.3-high.stderr"
+    },
+    {
+      "toolId": "gemini-2.5-pro",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 53179,
+      "wordCount": 849,
+      "outputFile": "agents/counselors/1773389021-final-solution-1773389082176/gemini-2.5-pro.md",
+      "stderrFile": "agents/counselors/1773389021-final-solution-1773389082176/gemini-2.5-pro.stderr"
+    },
+    {
+      "toolId": "gemini-3-pro",
+      "status": "success",
+      "exitCode": 0,
+      "durationMs": 543674,
+      "wordCount": 644,
+      "outputFile": "agents/counselors/1773389021-final-solution-1773389082176/gemini-3-pro.md",
+      "stderrFile": "agents/counselors/1773389021-final-solution-1773389082176/gemini-3-pro.stderr"
+    }
+  ]
+}
