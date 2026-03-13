@@ -110,569 +110,93 @@ By the time the module's `import()` resolves, `onEffect` and `onMorph` have alre
 
 ## Solution A: Livewire-Only (`_x_ignore` + `onPrepare`)
 
-No Alpine changes. Uses Alpine's existing internal `_x_ignore` flag for the safety net and adds a new `onPrepare` lifecycle hook to Livewire's message interceptor system for pre-loading modules during AJAX responses.
+No Alpine changes. All three scenarios handled in Livewire.
 
-### Part 1: Initial page load (pre-import before `Alpine.start()`)
+**Scenario 1 (initial load):** Make `start()` in `lifecycle.js` async. Before calling `Alpine.start()`, scan all `[wire:id]` elements on the page, parse their `wire:effects` for `scriptModule` hashes, `import()` all modules in parallel, and store them in a shared module cache. When `Alpine.start()` runs and the `effect` hook fires for each component, the module is already cached and `module.run()` executes synchronously.
 
-Make `start()` in `lifecycle.js` async. Before calling `Alpine.start()`, scan the DOM for all Livewire components with script modules, import them all, and cache them.
-
-**Changes to `lifecycle.js`:**
-
-```js
-export async function start() {
-    // ... existing plugin registration ...
-
-    await preloadInitialModules()
-
-    Alpine.start()
-
-    // ...
-}
-```
-
-**Changes to `supportJsModules.js`** (new export):
-
-```js
-let moduleCache = new Map()
-
-export async function preloadInitialModules() {
-    let els = document.querySelectorAll('[wire\\:id][wire\\:effects]')
-    let imports = []
-
-    els.forEach(el => {
-        let effects = JSON.parse(el.getAttribute('wire:effects'))
-        if (!effects.scriptModule) return
-
-        let snapshot = JSON.parse(el.getAttribute('wire:snapshot'))
-        let name = snapshot.memo.name
-        let hash = effects.scriptModule
-        let cacheKey = name + ':' + hash
-
-        if (moduleCache.has(cacheKey)) return
-
-        let encodedName = name.replace(/\./g, '--').replace(/::/g, '---').replace(/:/g, '----')
-        let path = `${getModuleUrl()}/js/${encodedName}.js?v=${hash}`
-
-        imports.push(
-            import(path)
-                .then(module => moduleCache.set(cacheKey, module))
-                .catch(e => console.warn(`Livewire: failed to preload module for [${name}]`, e))
-        )
-    })
-
-    await Promise.allSettled(imports)
-}
-```
-
-The existing `effect` handler is updated to check the cache first:
-
-```js
-on('effect', ({ component, effects }) => {
-    let scriptModuleHash = effects.scriptModule
-    if (!scriptModuleHash) return
-
-    let cacheKey = component.name + ':' + scriptModuleHash
-
-    if (moduleCache.has(cacheKey)) {
-        // Module was pre-loaded, run it synchronously
-        let module = moduleCache.get(cacheKey)
-        module.run.call(component.$wire, component.$wire, component.$wire.js)
-        return
-    }
-
-    // Fallback: module wasn't pre-loaded, load async (safety net will catch this)
-    let encodedName = component.name.replace(/\./g, '--').replace(/::/g, '---').replace(/:/g, '----')
-    let path = `${getModuleUrl()}/js/${encodedName}.js?v=${scriptModuleHash}`
-
-    pendingComponentAssets.set(component, Alpine.reactive({
-        loading: true,
-        afterLoaded: [],
-    }))
-
-    import(path)
-        .then(module => {
-            moduleCache.set(cacheKey, module)
-            module.run.call(component.$wire, component.$wire, component.$wire.js)
-
-            pendingComponentAssets.get(component).loading = false
-            pendingComponentAssets.get(component).afterLoaded.forEach(callback => callback())
-            pendingComponentAssets.delete(component)
-        })
-        .catch(e => {
-            console.warn(`Livewire: failed to load module for [${component.name}]`, e)
-            if (pendingComponentAssets.has(component)) {
-                pendingComponentAssets.get(component).loading = false
-                pendingComponentAssets.get(component).afterLoaded.forEach(callback => callback())
-                pendingComponentAssets.delete(component)
-            }
-        })
-})
-```
-
-When modules are pre-loaded, the effect handler finds them in the cache and runs them synchronously. `Alpine.data()` is registered before `x-data` is processed. No race condition.
-
-### Part 2: AJAX responses (new `onPrepare` hook)
-
-Add a new awaitable `onPrepare` hook to Livewire's message interceptor system. This hook runs between `onSync` and `processEffects`:
+**Scenarios 2 and 3 (AJAX responses):** Add a new awaitable `onPrepare` hook to Livewire's message interceptor system, positioned between `onSync` and `processEffects`:
 
 ```
 onSync → onPrepare (awaited) → processEffects → onEffect → onMorph
 ```
 
-**Changes to `interceptor.js`:**
+> A new hook is needed here because `onSync` is currently synchronous. Making `onSync` awaitable would be a breaking change for applications that expect it to execute synchronously. `onPrepare` is a new, dedicated async hook that doesn't change existing behaviour.
 
-Add `onPrepare` to the `MessageInterceptor` class:
+A handler in `supportJsModules.js` uses `onPrepare` to scan the response payload: the component's own `effects.scriptModule` and any child components found in `effects.html` (parsed via an inert `<template>` element, querying for `[wire:effects]` elements). All discovered modules are imported and cached before `processEffects` runs. Because `onPrepare` runs before `onEffect`, loading indicators and placeholders remain visible while modules load. By the time effects are processed, modules are cached and execute synchronously.
 
-```js
-export class MessageInterceptor {
-    // ... existing hooks ...
-    onPrepare = async () => {}
-    // ...
-}
-```
+**Shared module cache:** Both mechanisms (initial pre-load and `onPrepare`) share a single `Map` in `supportJsModules.js`, keyed by component name + hash. The `effect` handler checks the cache first; if the module is cached, it runs synchronously and never creates a pending asset entry.
 
-Expose it in the constructor callback:
-
-```js
-this.callback({
-    // ... existing hooks ...
-    onPrepare: (callback) => this.onPrepare = callback,
-    // ...
-})
-```
-
-**Changes to `message.js`:**
-
-Add the invocation method:
-
-```js
-async invokeOnPrepare() {
-    await Promise.all(
-        this.interceptors.map(interceptor => interceptor.onPrepare())
-    )
-}
-```
-
-Expose it in `invokeOnSuccess`:
-
-```js
-invokeOnSuccess() {
-    this.interceptors.forEach(interceptor => {
-        interceptor.onSuccess({
-            payload: this.responsePayload,
-            onSync: callback => interceptor.onSync = callback,
-            onPrepare: callback => interceptor.onPrepare = callback,  // NEW
-            onEffect: callback => interceptor.onEffect = callback,
-            onMorph: callback => interceptor.onMorph = callback,
-            onRender: callback => interceptor.onRender = callback
-        })
-    })
-    // ...
-}
-```
-
-**Changes to `request/index.js`:**
-
-Insert the awaited call between `invokeOnSync` and `processEffects`:
-
-```js
-Alpine.transaction(async () => {
-    message.component.mergeNewSnapshot(snapshotEncoded, effects, message.updates)
-
-    message.invokeOnSync()
-    if (message.isCancelled()) return
-
-    await message.invokeOnPrepare()  // NEW
-    if (message.isCancelled()) return
-
-    message.component.processEffects(effects, request)
-
-    message.invokeOnEffect()
-    // ...
-})
-```
-
-**Changes to `supportJsModules.js`** (using `onPrepare`):
-
-```js
-interceptMessage(({ message, onSuccess }) => {
-    onSuccess(({ payload, onPrepare }) => {
-        onPrepare(async () => {
-            let imports = []
-
-            // Pre-load the component's own module
-            let hash = payload.effects.scriptModule
-            if (hash) {
-                imports.push(preloadModule(message.component.name, hash))
-            }
-
-            // Pre-load child component modules found in the response HTML
-            let html = payload.effects.html
-            if (html) {
-                let template = document.createElement('template')
-                template.innerHTML = html
-
-                template.content.querySelectorAll('[wire\\:effects]').forEach(el => {
-                    let childEffects = JSON.parse(el.getAttribute('wire:effects'))
-                    if (!childEffects.scriptModule) return
-
-                    let childSnapshot = JSON.parse(el.getAttribute('wire:snapshot'))
-                    let childName = childSnapshot.memo.name
-
-                    imports.push(preloadModule(childName, childEffects.scriptModule))
-                })
-            }
-
-            await Promise.allSettled(imports)
-        })
-    })
-})
-```
-
-The `preloadModule` helper imports the module and stores it in the shared `moduleCache`:
-
-```js
-function preloadModule(name, hash) {
-    let cacheKey = name + ':' + hash
-    if (moduleCache.has(cacheKey)) return Promise.resolve()
-
-    let encodedName = name.replace(/\./g, '--').replace(/::/g, '---').replace(/:/g, '----')
-    let path = `${getModuleUrl()}/js/${encodedName}.js?v=${hash}`
-
-    return import(path)
-        .then(module => moduleCache.set(cacheKey, module))
-        .catch(e => console.warn(`Livewire: failed to preload module for [${name}]`, e))
-}
-```
-
-Because `onPrepare` runs before `processEffects`, the effect handler finds modules in the cache and runs them synchronously. `wire:loading` stays visible during the `onPrepare` phase (it doesn't clear until `onEffect`), so the user sees a continuous loading experience.
-
-### Part 3: Safety net (`_x_ignore`)
-
-If a module is somehow not pre-loaded (an edge case we haven't anticipated), defer the component's Alpine initialisation until the module loads.
-
-**Changes to `lifecycle.js`:**
-
-In the `interceptInit` callback, after creating the Component. Note: the callback signature changes from `el =>` to `(el, skip) =>` to access the walker's skip function (Alpine's `skipDuringClone` passes all arguments through via `...args`):
-
-```js
-if (el.hasAttribute('wire:id') && !el.__livewire && !hasComponent(el.getAttribute('wire:id'))) {
-    let component = initComponent(el)
-
-    // Safety net: defer Alpine init if module is still loading
-    if (assetIsPendingFor(component)) {
-        el._x_ignore = true
-        skip()
-
-        runAfterAssetIsLoadedFor(component, () => {
-            if (!el.isConnected) {
-                destroyComponent(component.id)
-                return
-            }
-
-            delete el._x_ignore
-            Alpine.initTree(el)
-        })
-
-        Alpine.onAttributeRemoved(el, 'wire:id', () => {
-            destroyComponent(component.id)
-        })
-
-        return
-    }
-
-    Alpine.onAttributeRemoved(el, 'wire:id', () => {
-        destroyComponent(component.id)
-    })
-}
-```
-
-**How `_x_ignore` prevents double-init:**
-
-On the first pass (module pending):
-- `interceptInit` creates the Component, detects the pending asset, sets `el._x_ignore = true`
-- `skip()` prevents the walker from visiting child elements
-- The early `return` prevents directive hooks from firing
-- Alpine's `initTree` only assigns `_x_marker` when `_x_ignore` is falsy, so no marker is set
-- Directive handlers that were collected for this element check `_x_ignore` at execution time and early-return
-
-On re-init (module loaded, `_x_ignore` deleted):
-- `initTree(el)` is called; no `_x_marker` exists, so it proceeds
-- `interceptInit` fires but skips Component creation because `el.__livewire` already exists
-- Directive hooks (`directive.global.init`, `directive.init`) fire for the first time
-- Children are visited for the first time
-- `x-data` evaluates and finds the registered data component
-
-Everything fires exactly once.
-
-### Summary
-
-| Piece | What it does | Files changed |
-|-------|-------------|---------------|
-| Pre-import (initial load) | `await import()` all modules before `Alpine.start()` | `lifecycle.js`, `supportJsModules.js` |
-| `onPrepare` hook | New awaitable hook between `onSync` and `processEffects` | `interceptor.js`, `message.js`, `request/index.js` |
-| `onPrepare` handler | Pre-loads modules from response before processing | `supportJsModules.js` |
-| Safety net | Defers Alpine init via `_x_ignore` when module is pending | `lifecycle.js` |
-| Module cache | Shared cache keyed by component name + hash | `supportJsModules.js` |
+| Files changed | What changes |
+|---------------|-------------|
+| `supportJsModules.js` | Module cache, `preloadInitialModules()` export, `onPrepare` handler, updated `effect` handler with cache check and error handling |
+| `lifecycle.js` | Async `start()` with `await preloadInitialModules()` |
+| `interceptor.js` | Add `onPrepare` hook to `MessageInterceptor` |
+| `message.js` | Add `invokeOnPrepare()`, expose `onPrepare` in `invokeOnSuccess` |
+| `request/index.js` | `await message.invokeOnPrepare()` between `invokeOnSync` and `processEffects` |
 
 **Alpine changes:** None.
 
 **Trade-offs:**
 - (+) No Alpine changes required
-- (+) `_x_ignore` is well-understood and stable; we maintain both projects
+- (+) No breaking changes to existing hooks
 - (+) `onPrepare` follows the existing `interceptMessage` pattern used by `supportMorphDom`, `wire-loading`, etc.
-- (+) Correct `wire:loading` timing (loading persists while modules load)
+- (+) Correct `wire:loading` and placeholder timing
 - (-) Adds a new lifecycle hook (`onPrepare`) to the message interceptor API
-- (-) Uses Alpine's internal `_x_ignore` flag (undocumented), which could break if Alpine changes its semantics (mitigated by maintaining both projects)
-- (-) Safety net re-init logic lives in Livewire (`runAfterAssetIsLoadedFor` callback with `isConnected` guard, manual `delete _x_ignore`, manual `initTree(el)` call)
 
 ---
 
 ## Solution B: Alpine + Livewire (`_x_defer` + `onPrepare`)
 
-Small Alpine change: add native promise-based deferred initialisation (`_x_defer`). Same Livewire changes as Solution A for initial page load and AJAX pre-loading, but a simpler safety net.
+Same as Solution A for scenarios 1, 2, and 3 (async `start()`, `onPrepare` hook, shared module cache). The only difference is the safety net.
 
-### Part 1: Initial page load
+**Safety net:** Instead of manually managing `_x_ignore` and re-init callbacks, add a promise-based `_x_defer` mechanism to Alpine. When `initTree`'s walker encounters an element with `_x_defer` set to a promise, it skips the element and its children, then automatically re-initialises when the promise resolves (or catches and initialises anyway on failure).
 
-Identical to Solution A, Part 1. `preloadInitialModules()` runs before `Alpine.start()`.
+In Livewire's `interceptInit`, the safety net becomes a single line: `el._x_defer = getAssetPromiseFor(component)`. Alpine handles waiting, error recovery, `isConnected` checks, and re-init automatically.
 
-### Part 2: AJAX responses
+The `_x_defer` check must be placed *after* `initInterceptors` in Alpine's walker. This is important: Livewire's `interceptInit` is what creates the Component (triggering `processEffects()` which starts the import). If `_x_defer` were checked before interceptors, the Component would never be created. Livewire's `interceptInit` returns early (before its directive processing section) when setting `_x_defer`, preventing directive hooks from firing until re-init.
 
-Identical to Solution A, Part 2. New `onPrepare` hook, same interceptor handler, same module cache.
+| Files changed | What changes |
+|---------------|-------------|
+| All Solution A files | Same changes as Solution A |
+| Alpine's `lifecycle.js` | ~10 lines: `_x_defer` check in walker (after `initInterceptors`) |
+| Livewire's `lifecycle.js` | Safety net uses `el._x_defer = getAssetPromiseFor(component)` instead of `_x_ignore` |
+| `supportJsModules.js` | New `getAssetPromiseFor()` export |
 
-### Part 3: Safety net (`_x_defer`)
-
-Instead of manually managing `_x_ignore`, `skip()`, `runAfterAssetIsLoadedFor`, and `initTree(el)`, Livewire sets a promise on the element and Alpine handles everything else.
-
-**Changes to Alpine's `lifecycle.js`:**
-
-The `_x_defer` check must be placed *after* `initInterceptors` in the walker. This is important: Livewire's `interceptInit` callback is what creates the Component (which triggers `processEffects()` and starts the async `import()`). If the `_x_defer` check ran before interceptors, the Component would never be created and the import would never start. The correct placement:
-
-```js
-walker(el, (el, skip) => {
-    if (el._x_marker) return
-
-    intercept(el, skip)
-
-    initInterceptors.forEach(i => i(el, skip))
-
-    // Check for deferred init AFTER interceptors have run
-    // (interceptors like Livewire's interceptInit set _x_defer during their execution)
-    if (el._x_defer) {
-        el._x_defer.then(() => {
-            delete el._x_defer
-            if (!el.isConnected) return
-            initTree(el)
-        }).catch(() => {
-            delete el._x_defer
-            if (!el.isConnected) return
-            console.warn('Alpine: deferred init failed, initialising without waiting')
-            initTree(el)
-        })
-        skip()
-        return
-    }
-
-    directives(el, el.attributes).forEach(handle => handle())
-
-    if (!el._x_ignore) el._x_marker = markerDispenser++
-    el._x_ignore && skip()
-})
-```
-
-The flow for a Livewire component with a pending module:
-
-1. `initInterceptors.forEach(...)` runs Livewire's `interceptInit`
-2. `interceptInit` creates the Component, which calls `processEffects()`, which starts the async `import()`
-3. `interceptInit` detects the pending asset, sets `el._x_defer` to the module's promise, calls `skip()`, and returns early (before Livewire's directive processing section)
-4. Back in the walker, `_x_defer` is now set
-5. Alpine sees the promise, queues re-init for when it resolves, calls `skip()`, and returns
-6. Directives are never collected (the `return` on step 5 exits the walker callback before line 103)
-7. `_x_marker` is never set (same reason)
-
-This is slightly cleaner than Solution A's `_x_ignore` approach. With `_x_ignore`, directives ARE collected by the walker but early-return when flushed (they check `_x_ignore` at execution time). With `_x_defer`, directives are never collected at all because the walker returns before reaching that line.
-
-**Changes to Livewire's `lifecycle.js`:**
-
-The `interceptInit` callback needs to return early before the directive processing section (lines 72-91) when a module is pending. Note: the callback signature changes from `el =>` to `(el, skip) =>` to access the walker's skip function (Alpine's `skipDuringClone` passes all arguments through via `...args`):
-
-```js
-Alpine.interceptInit(
-    Alpine.skipDuringClone((el, skip) => {
-        if (!Array.from(el.attributes).some(attribute => matchesForLivewireDirective(attribute.name))) return
-
-        if (el.hasAttribute('wire:id') && !el.__livewire && !hasComponent(el.getAttribute('wire:id'))) {
-            let component = initComponent(el)
-
-            Alpine.onAttributeRemoved(el, 'wire:id', () => {
-                destroyComponent(component.id)
-            })
-
-            // Safety net: defer Alpine init if module is still loading
-            if (assetIsPendingFor(component)) {
-                el._x_defer = getAssetPromiseFor(component)
-                skip()
-                return  // Skip directive processing; Alpine will re-init when promise resolves
-            }
-        }
-
-        // ... directive processing (only runs if not deferred) ...
-    })
-)
-```
-
-`supportJsModules.js` needs to expose the module promise:
-
-```js
-export function getAssetPromiseFor(component) {
-    if (!pendingComponentAssets.has(component)) return Promise.resolve()
-
-    let asset = pendingComponentAssets.get(component)
-    if (!asset.loading) return Promise.resolve()
-
-    return new Promise(resolve => {
-        asset.afterLoaded.push(resolve)
-    })
-}
-```
-
-On re-init (promise resolved):
-- Alpine calls `initTree(el)`, no `_x_marker` exists, so it proceeds
-- `interceptInit` fires but `el.__livewire` exists, so Component creation is skipped
-- `assetIsPendingFor(component)` is false, so `_x_defer` is not set
-- Livewire's directive processing (lines 72-91) runs for the first time
-- Back in the walker, `_x_defer` is not set, so directives are processed normally
-- `x-data` evaluates and finds the registered data component
-
-Everything fires exactly once. Same result as Solution A's `_x_ignore` approach, but Alpine manages the waiting and re-init.
-
-### Summary
-
-| Piece | What it does | Files changed |
-|-------|-------------|---------------|
-| Pre-import (initial load) | Same as Solution A | `lifecycle.js`, `supportJsModules.js` |
-| `onPrepare` hook | Same as Solution A | `interceptor.js`, `message.js`, `request/index.js` |
-| `onPrepare` handler | Same as Solution A | `supportJsModules.js` |
-| Safety net | `_x_defer` promise on element; Alpine handles re-init | Alpine's `lifecycle.js`, Livewire's `lifecycle.js` |
-| Module cache | Same as Solution A | `supportJsModules.js` |
-
-**Alpine changes:** ~10 lines in `lifecycle.js` (add `_x_defer` check in walker).
+**Alpine changes:** ~10 lines in `lifecycle.js`.
 
 **Trade-offs:**
-- (+) Livewire's safety net is a single line (`el._x_defer = getAssetPromiseFor(component)`)
-- (+) Alpine handles re-init, error recovery, and `isConnected` guard automatically
-- (+) No manual `_x_ignore` management, no `runAfterAssetIsLoadedFor` callback
-- (+) `_x_defer` is a clean, general-purpose API that any Alpine plugin could use
-- (+) Error handling is built into Alpine (catches failed promises, warns, inits anyway)
-- (+) Correct `wire:loading` timing (same as Solution A)
-- (-) Requires an Alpine change (even if small)
+- (+) Safety net is a single line in Livewire; Alpine handles the complexity
+- (+) `_x_defer` is a clean, general-purpose API any Alpine plugin could use
+- (+) Error handling built into Alpine (catches failed promises, warns, inits anyway)
+- (+) No manual `_x_ignore` management or re-init callbacks
+- (-) Requires an Alpine change
 - (-) Adds `_x_defer` to Alpine's element property conventions
-- (-) `_x_defer` check placement in the walker is subtle (must be after `initInterceptors` so Livewire can create the Component first)
+- (-) Walker placement is subtle (must be after `initInterceptors`)
 
 ---
 
 ## Solution C: Livewire-Only, No New Hooks (`_x_ignore` + awaitable `onSync`)
 
-No Alpine changes, no new lifecycle hooks. Instead of adding `onPrepare`, make the existing `onSync` hook awaitable. Module pre-loading happens in `onSync`, which already runs between snapshot merging and `processEffects`.
+Same as Solution A, but instead of adding a new `onPrepare` hook, makes the existing `onSync` hook awaitable. `onSync` already runs between snapshot merging and `processEffects`, which is exactly where module pre-loading needs to happen. The module pre-loading handler registers on `onSync` instead of `onPrepare`.
 
-### Part 1: Initial page load
+The only internal user of `onSync` is `supportPreserveScroll.js`, which is synchronous and unaffected by the change.
 
-Identical to Solution A, Part 1.
-
-### Part 2: AJAX responses (awaitable `onSync`)
-
-Instead of adding a new `onPrepare` hook, make `invokeOnSync` async.
-
-**Changes to `message.js`:**
-
-```js
-async invokeOnSync() {
-    await Promise.all(
-        this.interceptors.map(interceptor => interceptor.onSync())
-    )
-}
-```
-
-Update `onSync` default in `interceptor.js`:
-
-```js
-onSync = async () => {}
-```
-
-**Changes to `request/index.js`:**
-
-```js
-Alpine.transaction(async () => {
-    message.component.mergeNewSnapshot(snapshotEncoded, effects, message.updates)
-
-    await message.invokeOnSync()  // NOW AWAITED
-    if (message.isCancelled()) return
-
-    message.component.processEffects(effects, request)
-    // ...
-})
-```
-
-**Changes to `supportJsModules.js`:**
-
-Same module pre-loading logic as Solution A's `onPrepare` handler, but registered on `onSync` instead:
-
-```js
-interceptMessage(({ message, onSuccess }) => {
-    onSuccess(({ payload, onSync }) => {
-        onSync(async () => {
-            let imports = []
-
-            let hash = payload.effects.scriptModule
-            if (hash) {
-                imports.push(preloadModule(message.component.name, hash))
-            }
-
-            let html = payload.effects.html
-            if (html) {
-                let template = document.createElement('template')
-                template.innerHTML = html
-
-                template.content.querySelectorAll('[wire\\:effects]').forEach(el => {
-                    let childEffects = JSON.parse(el.getAttribute('wire:effects'))
-                    if (!childEffects.scriptModule) return
-
-                    let childSnapshot = JSON.parse(el.getAttribute('wire:snapshot'))
-                    let childName = childSnapshot.memo.name
-
-                    imports.push(preloadModule(childName, childEffects.scriptModule))
-                })
-            }
-
-            await Promise.allSettled(imports)
-        })
-    })
-})
-```
-
-### Part 3: Safety net
-
-Identical to Solution A, Part 3 (`_x_ignore`).
-
-### Summary
-
-| Piece | What it does | Files changed |
-|-------|-------------|---------------|
-| Pre-import (initial load) | Same as Solution A | `lifecycle.js`, `supportJsModules.js` |
-| Awaitable `onSync` | Make `invokeOnSync` async | `interceptor.js`, `message.js`, `request/index.js` |
-| `onSync` handler | Pre-loads modules from response before processing | `supportJsModules.js` |
-| Safety net | Same as Solution A (`_x_ignore`) | `lifecycle.js` |
-| Module cache | Same as Solution A | `supportJsModules.js` |
+| Files changed | What changes |
+|---------------|-------------|
+| `supportJsModules.js` | Same as Solution A (module cache, pre-load handler, etc.) but handler uses `onSync` |
+| `lifecycle.js` | Same as Solution A (async `start()`, safety net) |
+| `interceptor.js` | Change `onSync` default to `async () => {}` |
+| `message.js` | Make `invokeOnSync()` async with `Promise.all` |
+| `request/index.js` | `await message.invokeOnSync()` |
 
 **Alpine changes:** None.
 
 **Trade-offs:**
 - (+) No Alpine changes
 - (+) No new lifecycle hooks (smallest API surface change)
-- (+) Correct `wire:loading` timing
-- (+) `onSync` runs at exactly the right point in the lifecycle
-- (-) **Breaking change.** `onSync` is currently synchronous. Existing user-land code using `onSync` may not expect it to be awaited. If someone has `onSync(() => { /* sync code that assumes immediate continuation */ })`, making the hook awaitable could change timing. The only internal user is `supportPreserveScroll.js`, which is synchronous and unaffected.
-- (-) Changes the documented contract of `onSync` (described as "After state merged/synced")
+- (+) Correct `wire:loading` and placeholder timing
+- (-) **Breaking change.** `onSync` is currently synchronous. User-land code using `onSync` may not expect it to be awaited. Making a sync hook async is a subtle contract change that could affect timing expectations.
+- (-) Changes the documented contract of `onSync`
 
 ---
 
@@ -680,7 +204,7 @@ Identical to Solution A, Part 3 (`_x_ignore`).
 
 **Solution A (Livewire-only, `_x_ignore` + `onPrepare`)** is the strongest option.
 
-It solves all three scenarios with correct `wire:loading` timing, requires no Alpine changes, and introduces no breaking changes. The new `onPrepare` hook is a small, focused addition that follows the exact same pattern as every other hook in the interceptor system (`onSync`, `onEffect`, `onMorph`).
+It solves all three scenarios with correct loading/placeholder timing, requires no Alpine changes, and introduces no breaking changes. The new `onPrepare` hook is a small, focused addition that follows the exact same pattern as every other hook in the interceptor system (`onSync`, `onEffect`, `onMorph`).
 
 Solution B's `_x_defer` is elegant, but the placement subtlety (must run after `initInterceptors`) adds complexity that doesn't justify the benefit. The safety net is a fallback path that should rarely fire; making it one line shorter isn't worth an Alpine API change.
 
