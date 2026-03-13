@@ -267,6 +267,43 @@ onSuccess → onSync → onEffect → onBeforeMorph → onMorph → onFinish →
 - (-) Adds a new hook to the public API / lifecycle
 - (-) More code to maintain
 
+### Important: `wire:loading` timing
+
+Options A, B, and C above all place module loading *after* `processEffects`. However, `wire:loading` clears its loading state in `onEffect` (see `wire-loading.js:106-112`), which runs after `processEffects` but before `onMorph`. This means with any of those options, the loading indicator disappears before the morph, leaving a visible gap where neither loading indicators nor the new content are shown.
+
+To preserve loading state while modules load, the async work needs to happen *before* `processEffects` runs. The following two options achieve this by placing module loading between `onSync` and `processEffects`:
+
+### Option D: Make `onSync` awaitable
+
+Make `invokeOnSync` async (currently synchronous). `supportJsModules.js` uses `onSync` to read the response payload's `effects.scriptModule` and `effects.html`, pre-load all modules (including child components found in the HTML), and await them. By the time `processEffects` runs, modules are cached and execute synchronously. `wire:loading` clears in `onEffect` as normal, right before the morph.
+
+The only existing `onSync` user is `supportPreserveScroll`, which is synchronous, so awaiting it is a no-op.
+
+```
+onSync (awaited) → processEffects → onEffect (loading clears) → onMorph
+```
+
+**Trade-offs:**
+- (+) No new hooks, smallest API surface change
+- (+) Correct loading timing: loading persists while modules load
+- (+) Docs describe `onSync` as "After state merged/synced" which fits (state is merged, now prepare async dependencies)
+- (-) Breaking change: user-land `onSync` callbacks currently execute synchronously; making the hook awaitable could change timing expectations for existing code
+
+### Option E: Add a dedicated `onPrepare` hook
+
+Add a new awaited hook between `onSync` and `processEffects`:
+
+```
+onSync → onPrepare (awaited) → processEffects → onEffect (loading clears) → onMorph
+```
+
+**Trade-offs:**
+- (+) Explicit, self-documenting
+- (+) Correct loading timing
+- (+) Doesn't change existing hook behaviour
+- (-) Adds a new hook to the public API / lifecycle
+- (-) More code to maintain
+
 ---
 
 ## Resolved Questions
