@@ -191,16 +191,22 @@ This stops all crashes across all three scenarios. However, it doesn't solve the
 
 ---
 
-## Solution C: Livewire-Only, No New Hooks (`_x_ignore` + awaitable `onSync`)
+## Solution C: Livewire-Only, No New Hooks (awaitable `onSync`)
 
-Same as Solution A, but instead of adding a new `onPrepare` hook, makes the existing `onSync` hook awaitable. `onSync` already runs between snapshot merging and `processEffects`, which is exactly where module pre-loading needs to happen. The module pre-loading handler registers on `onSync` instead of `onPrepare`.
+Same approach as Solution A but without adding a new hook. Instead of `onPrepare`, make the existing `onSync` hook awaitable.
+
+**Scenario 1 (initial load):** Same as Solution A. Make `start()` async, pre-import all modules before `Alpine.start()`, shared module cache.
+
+**Scenarios 2 and 3 (AJAX responses):** `onSync` already runs between snapshot merging and `processEffects`, which is exactly where module pre-loading needs to happen. Make `invokeOnSync()` async so it awaits all `onSync` callbacks. A handler in `supportJsModules.js` registers on `onSync` to scan the response payload, discover modules, and import them before `processEffects` runs. Same module discovery logic as Solution A (parsing `effects.html` via inert `<template>` element). Same correct loading/placeholder timing.
 
 The only internal user of `onSync` is `supportPreserveScroll.js`, which is synchronous and unaffected by the change.
 
+> While Livewire internals are unaffected, user-land code using `onSync` may expect it to execute synchronously. Making a sync hook awaitable is a subtle contract change that could affect timing expectations in existing applications.
+
 | Files changed | What changes |
 |---------------|-------------|
-| `supportJsModules.js` | Same as Solution A (module cache, pre-load handler, etc.) but handler uses `onSync` |
-| `lifecycle.js` | Same as Solution A (async `start()`, safety net) |
+| `supportJsModules.js` | Module cache, `preloadInitialModules()` export, `onSync` handler for module pre-loading, updated `effect` handler with cache check and error handling |
+| `lifecycle.js` | Async `start()` with `await preloadInitialModules()` |
 | `interceptor.js` | Change `onSync` default to `async () => {}` |
 | `message.js` | Make `invokeOnSync()` async with `Promise.all` |
 | `request/index.js` | `await message.invokeOnSync()` |
