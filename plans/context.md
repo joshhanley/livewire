@@ -28,6 +28,10 @@ Discussions: #9591, #9737, #9830
 - Alpine source: `node_modules/alpinejs/src/lifecycle.js` - `initTree`, `interceptInit`, `_x_marker`, `_x_ignore`
 - Alpine source: `node_modules/alpinejs/src/directives/x-data.js` - `x-data` directive evaluation
 - `js/directives/wire-cloak.js` - Removes `wire:cloak` immediately in its own `interceptInit` (won't help with FOUC)
+- `js/directives/wire-loading.js` - Loading state timing (clears in `onEffect`, lines 106-112)
+- `js/request/interceptor.js` - `MessageInterceptor` class, hook defaults
+- `js/features/supportPreserveScroll.js` - Only current `onSync` user (synchronous)
+- `js/features/supportIslands.js` - Islands DOM insertion path (may bypass morph delay hooks)
 
 ## The three scenarios
 
@@ -35,14 +39,11 @@ Discussions: #9591, #9737, #9830
 2. **Lazy/deferred components** - Placeholder rendered first, real component loaded via AJAX
 3. **Dynamically added components** - Parent re-renders, morph adds new child with a script module
 
-## Main findings document
+## Documents
 
-`plans/initial-findings.md` contains:
-- Full race condition analysis with code flow tracing
-- Four solution ideas (A through D) with trade-offs
-- "Delaying the Morph" section with three sub-options (A/B/C) for hook timing
-- A "Possible Enhancement" section on `<link rel="modulepreload">`
-- Resolved questions with reasoning
+- `plans/initial-findings.md` - Full race condition analysis, solution ideas A-D, morph delay options A-E, modulepreload enhancement, resolved questions
+- `plans/experts-review.md` - First expert review (scenario completeness, technical validation)
+- `plans/experts-recommendation.md` - Expert implementation recommendations and build order
 
 ## Decisions made
 
@@ -67,13 +68,18 @@ On re-init (module loaded, `_x_ignore` deleted):
 - All directive hooks fire for the first time
 - Children visited for the first time
 
-## Unresolved design choice: morph delay hook timing
+## Key discovery: `wire:loading` timing
 
-The morph needs to wait for child modules, but both module loading and morphing use message lifecycle hooks. Only `onMorph` is currently awaited. Options:
+`wire:loading` clears its state in `onEffect` (`wire-loading.js:106-112`), which runs *before* `onMorph`. Morph delay options A-C all place module loading after `processEffects`, so loading indicators disappear before modules finish loading. Options D and E solve this by placing module loading *before* `processEffects`:
 
-- **Option A:** Make `invokeOnEffect` awaitable (it runs before `onMorph`)
-- **Option B:** Make `invokeOnMorph` run callbacks sequentially (fragile, depends on import order)
-- **Option C:** Add a new `onBeforeMorph` hook
+- **Option D:** Make `onSync` awaitable (BC risk: changes existing hook from sync to async)
+- **Option E:** Add a new `onPrepare` hook between `onSync` and `processEffects` (recommended by 3 of 4 experts)
+
+## Expert-recommended approach
+
+**Build order:** Idea B first (stops crashes), then Option E morph delay (correct loading timing), then Idea A (initial load polish). Defer `<link rel="modulepreload">` as enhancement.
+
+**Minimum viable fix:** Idea B alone stops all "Can't find variable" errors.
 
 ## Important edge case noted
 
