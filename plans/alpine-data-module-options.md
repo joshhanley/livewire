@@ -82,10 +82,12 @@ The goal is to keep placeholders and loading indicators visible while modules lo
 
 ### Where module loading currently sits in the request pipeline
 
-When a Livewire AJAX response arrives, it's processed through a series of hooks inside an `Alpine.transaction`:
+When a Livewire AJAX response arrives, processing happens per message (component) inside an `Alpine.transaction`:
 
 ```
-onSuccess → onSync → processEffects → onEffect → onMorph → onFinish → onRender
+Alpine.transaction {
+    mergeNewSnapshot → onSync → processEffects → onEffect → await onMorph
+} → onFinish → onRender
 ```
 
 Key hooks:
@@ -105,6 +107,13 @@ By the time the module's `import()` resolves, `onEffect` and `onMorph` have alre
 3. **Scenario 3 (dynamic children):** Modules must be loaded before the parent's loading indicators are cleared and the morph inserts the new child.
 
 4. **Error handling:** If a module fails to load (network error, 404), the component should still initialise without the module's functionality. A partially working component is better than one that never appears. Log a console warning and continue.
+
+5. **Timeout protection:** Module imports that hang (slow CDN, broken URL) must not block response processing indefinitely. Use `Promise.race` with a reasonable timeout so the UI degrades gracefully rather than freezing.
+
+### Known areas needing verification
+
+- **Islands:** `supportIslands.js` has its own DOM insertion path (via `effects.islandFragments` and streamed chunks) that may bypass the normal morph pipeline. Module discovery needs to account for this or be tested against it.
+- **`wire:navigate`:** `inscribeSnapshotAndEffectsOnElement` (component.js) only preserves `listeners`, `url`, and `scripts` effects when caching a page, not `scriptModule`. Alpine.data() registrations persist globally, but `$js` actions bound to the component instance may be lost on navigate cache restore. Needs testing.
 
 ---
 
@@ -234,4 +243,6 @@ Solution A is the right approach. It handles all three scenarios correctly:
 
 The new `onPrepare` hook follows the existing `interceptMessage` pattern used by `supportMorphDom`, `wire-loading`, and others. It doesn't change any existing hook contracts and requires no Alpine changes. From Alpine's perspective, module loading becomes fully synchronous: by the time `processEffects` runs and the `effect` hook fires, every module is already cached and `module.run()` executes immediately.
 
-Solution C achieves the same result but introduces a breaking change by making `onSync` awaitable. Solution B stops the crashes but doesn't solve the user experience (FOUC on all three scenarios, loading indicators clear too early). Solution B could be layered on top of A as a defensive fallback (if a module somehow isn't pre-loaded, the `_x_ignore` check catches it instead of crashing), but in practice it shouldn't be needed. If modules are properly awaited before effects are processed, there's no race condition left to catch. It's worth considering only if we want extra resilience against unexpected edge cases.
+Solution C achieves the same result but introduces a breaking change by making `onSync` awaitable. Solution B stops the crashes but doesn't solve the user experience (FOUC on all three scenarios, loading indicators clear too early).
+
+Solution B could be layered on top of A as a defensive fallback (if a module somehow isn't pre-loaded, the `_x_ignore` check catches it instead of crashing).
