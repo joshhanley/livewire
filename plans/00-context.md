@@ -45,6 +45,9 @@ Discussions: #9591, #9737, #9830
 - `02-experts-review.md` - First expert review (scenario completeness, technical validation)
 - `03-experts-recommendation.md` - Expert implementation recommendations and build order
 - `04-pr-comparison.md` - Comparison of PR #9861 approach vs our plan
+- `05-alpine-options.md` - Alpine-side options (auto-retry, deferInit/resumeInit, `_x_ignore` as-is, promise-based `_x_defer`)
+
+Alpine source is available locally at `packages/alpine` (APFS clone from `/Users/josh/tend/packages/alpine`, on `main`).
 
 ## Decisions made
 
