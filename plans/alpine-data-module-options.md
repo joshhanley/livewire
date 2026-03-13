@@ -224,20 +224,14 @@ The only internal user of `onSync` is `supportPreserveScroll.js`, which is synch
 
 ## Recommendation
 
-**Solution A (Livewire-only, `_x_ignore` + `onPrepare`)** is the strongest option.
+Solution A is the right approach. It handles all three scenarios correctly:
 
-It solves all three scenarios with correct loading/placeholder timing, requires no Alpine changes, and introduces no breaking changes. The new `onPrepare` hook is a small, focused addition that follows the exact same pattern as every other hook in the interceptor system (`onSync`, `onEffect`, `onMorph`).
+**Scenario 1 (initial load):** Making `start()` async and awaiting all module imports before calling `Alpine.start()` guarantees that every `Alpine.data()` registration is in place before Alpine walks the DOM. The user is already waiting for the page to become interactive, so the small additional delay is invisible.
 
-Solution B's `_x_defer` is elegant, but the placement subtlety (must run after `initInterceptors`) adds complexity that doesn't justify the benefit. The safety net is a fallback path that should rarely fire; making it one line shorter isn't worth an Alpine API change.
+**Scenario 2 (lazy components):** The `onPrepare` hook discovers and imports child modules before `processEffects` runs. Because `onPrepare` fires before `onEffect` and `onMorph`, the lazy placeholder stays visible while modules load. Once modules are cached, the morph applies and the fully initialised component replaces the placeholder in one step. No flash of broken content.
 
-Solution C avoids a new hook but introduces a breaking change to `onSync`. Even though the only internal user is synchronous, changing a hook from sync to async is the kind of subtle contract change that bites user-land code.
+**Scenario 3 (dynamic children):** Same mechanism. The parent's `wire:loading` indicators remain visible while `onPrepare` loads the new child's module. The morph only applies after modules are ready, so the user sees loading spinner, then the complete child. No intermediate state where loading indicators have cleared but the child isn't initialised.
 
-**Build order for Solution A:**
+The new `onPrepare` hook follows the existing `interceptMessage` pattern used by `supportMorphDom`, `wire-loading`, and others. It doesn't change any existing hook contracts and requires no Alpine changes. From Alpine's perspective, module loading becomes fully synchronous: by the time `processEffects` runs and the `effect` hook fires, every module is already cached and `module.run()` executes immediately.
 
-1. **Safety net first** (~15 lines in `lifecycle.js`, ~5 in `supportJsModules.js`). This stops all crashes immediately. Components with pending modules defer their init and re-init when the module loads. FOUC on first load, but no errors.
-
-2. **`onPrepare` hook + handler** (~30 lines across `interceptor.js`, `message.js`, `request/index.js`, `supportJsModules.js`). Scenarios 2 and 3 fully solved with correct loading timing.
-
-3. **Pre-import for initial load** (~25 lines in `lifecycle.js` and `supportJsModules.js`). Scenario 1 fully solved. No FOUC on first load.
-
-Each step is independently shippable and testable.
+Solution C achieves the same result but introduces a breaking change by making `onSync` awaitable. Solution B stops the crashes but doesn't solve the user experience (FOUC on all three scenarios, loading indicators clear too early). Solution B could be layered on top of A as a defensive fallback (if a module somehow isn't pre-loaded, the `_x_ignore` check catches it instead of crashing), but in practice it shouldn't be needed. If modules are properly awaited before effects are processed, there's no race condition left to catch. It's worth considering only if we want extra resilience against unexpected edge cases.
