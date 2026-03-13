@@ -1,4 +1,4 @@
-# Script Module Loading: Race Condition Analysis and Solution Ideas
+# Script Module Loading: Race Condition Analysis and Solution Design
 
 ## The Problem
 
@@ -58,6 +58,8 @@ The `@script` directive stores script content inline in `wire:effects` as the `s
 
 `$wire.js` already handles the race condition for `$js` actions: when `assetIsPendingFor(component)` is true, `$js` property access returns a promise that resolves after the module loads. But this doesn't help with `Alpine.data()` registrations since those go through Alpine's own data resolution, not through `$wire`.
 
+---
+
 ## Three Scenarios to Solve
 
 ### Scenario 1: Initial page load
@@ -68,8 +70,6 @@ Components present in the server-rendered HTML have `wire:effects` containing a 
 
 Lazy components render a placeholder on initial page load. `SupportJsModules::dehydrate()` returns early when `isLazyLoadMounting` is true, so no `scriptModule` effect is added to the placeholder. The real component (with its `scriptModule` effect) is loaded via an AJAX request triggered by `x-intersect` or `x-init`.
 
-**Decision needed:** Should we preload lazy component modules on page load (faster when they become visible) or wait until the lazy load request fires (less upfront network)?
-
 ### Scenario 3: Dynamically added components
 
 A parent component re-renders and its new HTML includes a child component that wasn't there before. The morph adds the child to the DOM, Alpine's mutation observer detects it, and `initTree()` runs on the new element. The child's `scriptModule` effect triggers an async import, but `x-data` is processed before it resolves.
@@ -78,182 +78,23 @@ This differs from scenarios 1 and 2 because we don't have advance notice of whic
 
 ---
 
-## Solution Ideas
+## Solution: Pre-import + Deferred Init + Morph Delay
 
-### Idea A: Pre-import modules before `Alpine.start()` (solves scenario 1)
+The solution has three parts, one for each scenario. Each part uses a different mechanism suited to its context, but they all share a common module cache.
 
-Before calling `Alpine.start()` in `lifecycle.js`, scan all `[wire:id]` elements on the page, parse their `wire:effects` attributes to find `scriptModule` hashes, and pre-import all modules in parallel. Wait for all imports to resolve, then start Alpine.
+### Part 1: Pre-import for initial page load (scenario 1)
+
+Before calling `Alpine.start()` in `lifecycle.js`, scan all `[wire:id]` elements on the page, parse their `wire:effects` attributes to find `scriptModule` hashes, and pre-import all modules in parallel. Wait for all imports to resolve, cache the modules, then start Alpine.
 
 ```js
 // lifecycle.js
 export async function start() {
-    // ... plugin registration ...
-
-    // Pre-load all script modules before Alpine starts
-    let moduleCache = await preloadScriptModules()
-
-    Alpine.start()
-    // ...
-}
-```
-
-The `preloadScriptModules()` function would:
-1. Query `document.querySelectorAll('[wire\\:id][wire\\:effects]')`
-2. Parse each element's `wire:effects` JSON for a `scriptModule` key
-3. Parse each element's `wire:snapshot` JSON for the component name
-4. Construct the module URL and call `import()`
-5. Store resolved modules in a cache keyed by component name + hash
-6. Return the cache
-
-Then in `supportJsModules.js`, the `effect` handler checks the cache first. If the module is already cached, it calls `module.run()` synchronously. If not (scenarios 2/3), it falls back to async import.
-
-**Trade-offs:**
-- (+) Clean and simple for initial page load
-- (+) No changes to Alpine needed
-- (-) Makes `start()` async, which changes the call site (but it's called from `DOMContentLoaded` so that's fine)
-- (-) Delays Alpine start while modules load (could be noticeable with many components or slow networks)
-- (-) Only solves scenario 1 on its own
-
-### Idea B: Defer Alpine init for components with pending modules (solves all scenarios)
-
-When a Livewire component has a pending script module import, prevent Alpine from processing directives on that component's element tree until the import completes. After the module loads, re-trigger Alpine initialisation for that subtree.
-
-**Implementation approach:**
-
-In `lifecycle.js`'s `interceptInit` callback, after creating the Component:
-
-```js
-if (assetIsPendingFor(component)) {
-    el._x_ignore = true  // prevents directive handlers from executing
-    skip()               // prevents walking into children
-
-    runAfterAssetIsLoadedFor(component, () => {
-        delete el._x_ignore
-        delete el._x_marker  // allow re-init
-        Alpine.initTree(el)  // re-process the element tree
-    })
-    return
-}
-```
-
-When `initTree()` re-runs, the `interceptInit` callback won't re-create the Component (because `el.__livewire` already exists), so it just processes directives normally.
-
-**Trade-offs:**
-- (+) Works for all three scenarios without needing separate mechanisms
-- (+) Only delays components that actually have script modules
-- (+) Other non-Livewire Alpine components init immediately
-- (-) Components with script modules will briefly exist in the DOM without their Alpine state (potential flash of unstyled/non-interactive content)
-- (-) Need to be careful that re-running `initTree` doesn't cause double-init of wire directives (the `directive.init` hook fires again)
-- (-) The `_x_marker` deletion + re-init is somewhat hacky
-
-### Idea C: Combine A + B (pre-import for initial load, defer for dynamic)
-
-Use Idea A for the initial page load (pre-import all modules before `Alpine.start()`) and Idea B for dynamically added components after the initial load.
-
-This gives the best user experience:
-- Initial page load: no flash of uninitialised content (modules are ready before Alpine starts)
-- Dynamic components: brief delay while module loads, but the component doesn't flash broken state because we use `_x_ignore`
-
-**Trade-offs:**
-- (+) Best UX for initial load (no flicker)
-- (+) Handles all scenarios
-- (-) Two mechanisms to maintain
-- (-) Slightly more complex
-
-### Idea D: Pre-import at response time (solves scenarios 2 and 3)
-
-For AJAX responses (lazy loads and parent re-renders), pre-import any script modules referenced in the response before processing it. This is done in the request pipeline.
-
-In `supportJsModules.js`, add a `payload.intercept` handler:
-
-```js
-on('payload.intercept', async ({ components }) => {
-    let modulePromises = []
-
-    components.forEach(({ effects }) => {
-        if (effects.scriptModule) {
-            // Pre-fetch and cache the module
-            modulePromises.push(fetchAndCacheModule(name, effects.scriptModule))
-        }
-    })
-
-    await Promise.all(modulePromises)
-})
-```
-
-Since `payload.intercept` is awaited before the response is processed (line 407 of `request/index.js`), the modules would be cached before the morph triggers `initTree()`.
-
-**The challenge:** For scenario 3 (dynamically added child components), the child's `scriptModule` effect isn't in the parent's response payload. It's embedded in the child's `wire:effects` attribute within the parent's HTML. We'd need to parse the HTML to find new child components' modules, which is fragile.
-
-**A possible way around this:** On the PHP side, include a list of all child component script modules in the parent's response. `SupportJsModules` could collect all descendant components' module URLs during the parent's dehydrate and add them to the response payload.
-
-### Idea E: Change module execution to not need `$wire` at registration time
-
-Restructure how script modules work so that `Alpine.data()` registrations happen at module import time (top-level), not inside `run()`. Code that needs `$wire` stays inside `run()` or uses lazy resolution.
-
-Current module format:
-```js
-export function run($wire, $js) {
-    Alpine.data('name', () => ({
-        someValue: $wire.entangle('foo'),  // $wire used at data-creation time
-        doThing() { $wire.call('method') } // $wire used at invocation time
-    }))
-}
-```
-
-New module format:
-```js
-// Top-level: runs when module is imported
-Alpine.data('name', () => ({
-    someValue: /* deferred $wire resolution */,
-    doThing() { this.$wire.call('method') }  // uses Alpine magic
-}))
-
-// Deferred: runs after Component is created
-export function run($wire, $js) {
-    // Any code that needs $wire at setup time
-}
-```
-
-**Trade-offs:**
-- (+) Eliminates the timing problem entirely for `Alpine.data()` registrations
-- (-) Very difficult to implement; the compiler would need to parse and split user JS
-- (-) Changes how `$wire` works inside data components (but `$wire` is already available as an Alpine magic on Livewire component elements, so `this.$wire` works in Alpine methods)
-- (-) Breaking change for existing code patterns
-
-### Idea F: Inject `<link rel="modulepreload">` tags from PHP (helps scenario 1)
-
-On the PHP side, when rendering the initial page, inject `<link rel="modulepreload" href="/livewire/js/{component}.js">` tags into `<head>` for all components on the page. This tells the browser to start fetching modules immediately, before any JS runs.
-
-This doesn't solve the problem on its own (the module still needs to be *executed*), but it can be combined with Idea A to make the pre-import resolve faster since the browser has already started downloading.
-
-**Trade-offs:**
-- (+) Browser starts downloading modules sooner
-- (+) Simple PHP change
-- (-) Doesn't solve the timing problem alone
-- (-) Only useful for initial page load
-
----
-
-## Recommended Approach: Idea C (Pre-import + Deferred Init)
-
-The combination of pre-importing for initial load (Idea A) and deferring Alpine init for dynamic components (Idea B) provides the best balance of UX and robustness.
-
-### Implementation outline
-
-#### 1. Pre-import for initial page load (`lifecycle.js`)
-
-```js
-export async function start() {
     // ... dispatch events, register plugins ...
 
-    // Pre-load all script modules before Alpine starts
     await preloadInitialScriptModules()
 
     Alpine.start()
-
-    setTimeout(() => window.Livewire.initialRenderIsFinished = true)
-    dispatch(document, 'livewire:initialized')
+    // ...
 }
 
 async function preloadInitialScriptModules() {
@@ -281,7 +122,9 @@ async function preloadInitialScriptModules() {
 }
 ```
 
-#### 2. Use cache in effect handler (`supportJsModules.js`)
+This makes `start()` async, but it's called from a `DOMContentLoaded` listener so that's fine.
+
+In `supportJsModules.js`, the `effect` handler checks the cache first. If the module is already cached, it calls `module.run()` **synchronously**. If not (scenarios 2/3), it falls back to async import and the pending asset mechanism.
 
 ```js
 let moduleCache = new Map()
@@ -294,12 +137,12 @@ on('effect', ({ component, effects }) => {
     let cached = moduleCache.get(cacheKey)
 
     if (cached) {
-        // Module already loaded (initial page load) - run synchronously
+        // Module already loaded - run synchronously
         cached.run.call(component.$wire, component.$wire, component.$wire.js)
         return
     }
 
-    // Module not cached (dynamic/lazy) - load async with deferred init
+    // Module not cached - load async, mark as pending
     pendingComponentAssets.set(component, Alpine.reactive({
         loading: true,
         afterLoaded: [],
@@ -317,9 +160,11 @@ on('effect', ({ component, effects }) => {
 })
 ```
 
-#### 3. Deferred init for dynamic components (`lifecycle.js`)
+### Part 2: Deferred init safety net (all scenarios)
 
-In the `interceptInit` callback, after creating the Component:
+As a safety net for any component that starts initialising before its module is ready (e.g. dynamically added components picked up by Alpine's mutation observer), defer Alpine's directive processing on the component until the module loads.
+
+In `lifecycle.js`'s `interceptInit` callback, after creating the Component:
 
 ```js
 if (el.hasAttribute('wire:id') && !el.__livewire && !hasComponent(el.getAttribute('wire:id'))) {
@@ -336,7 +181,6 @@ if (el.hasAttribute('wire:id') && !el.__livewire && !hasComponent(el.getAttribut
 
         runAfterAssetIsLoadedFor(component, () => {
             delete el._x_ignore
-            delete el._x_marker
             Alpine.initTree(el)
         })
         return
@@ -344,14 +188,165 @@ if (el.hasAttribute('wire:id') && !el.__livewire && !hasComponent(el.getAttribut
 }
 ```
 
-### Open questions
+#### Why there's no double-init problem
 
-1. **Lazy component modules: preload or defer?** Option A: preload on page load for faster UX when they become visible. Option B: wait until lazy load fires (less upfront network). The placeholder snapshot does contain the component name, so we *could* preload. But if the user never scrolls to a lazy component, we'd have loaded a module for nothing.
+On the **first pass** (module pending):
+- `interceptInit` creates the Component, detects the pending asset, sets `el._x_ignore = true`, calls `skip()`, and **returns early**
+- `_x_ignore` prevents `_x_marker` from being set on the element (Alpine's `initTree` only sets `_x_marker` when `_x_ignore` is falsy)
+- `skip()` prevents the walker from visiting any child elements
+- The early `return` prevents `directive.global.init` and `directive.init` hooks from firing
+- Alpine's directive handlers are collected for the root element but early-return when flushed (they check `_x_ignore` at execution time)
 
-2. **`wire:navigate` (SPA navigation):** When navigating to a new page, the new page's HTML replaces the current page. Do we need to pre-import the new page's script modules before Alpine processes the new DOM? The navigate plugin stops/starts Alpine, so there may be a natural hook point.
+On the **re-init pass** (module loaded, `_x_ignore` deleted):
+- `_x_marker` was never set, so `initTree` proceeds
+- `interceptInit` fires but skips Component creation (`el.__livewire` exists)
+- `directive.global.init` and `directive.init` fire for the **first time**
+- Alpine's directive handlers (including `x-data`) fire for the **first time**
+- Children are visited for the **first time**
 
-3. **Double-init of wire directives:** When using the deferred init approach (Idea B), `initTree()` re-runs after the module loads. The `interceptInit` callback won't re-create the Component (checked by `el.__livewire`), but it will re-trigger `directive.init` for all wire directives. Are there guards against this, or do we need to add them?
+Everything fires exactly once. No guards needed.
 
-4. **Flash of content:** With the deferred init approach, a dynamically added component's HTML will be in the DOM but Alpine won't have processed it yet. The user might briefly see `x-show="false"` content visible, `x-text` expressions as raw text, etc. Should we add a `wire:cloak`-like mechanism to hide the component until its module loads? Or rely on Alpine's existing `x-cloak`?
+### Part 3: Delay morph until modules are ready (scenarios 2 and 3)
 
-5. **Error handling:** What if a module fails to load (network error, 404)? Currently the `import()` promise would reject silently. We should handle this gracefully, perhaps logging a warning and still allowing the component to init (without the module's functionality).
+When a Livewire AJAX response contains new child components with script modules (or a lazy component's own module), the morph should not apply until those modules are loaded and cached. This prevents any flash of uninitialised content; the parent keeps its old state (or the lazy placeholder stays visible) until everything is ready.
+
+The module loading concern should stay in `supportJsModules.js`, not bleed into `morph.js`. We use the same `interceptMessage` pattern that `supportMorphDom.js` uses, hooking into the request lifecycle.
+
+The challenge is timing: we need module loading to complete **before** the morph runs. Both would use the message lifecycle hooks. The available hooks in order are:
+
+```
+onSuccess → onSync → onEffect → onMorph → onFinish → onRender
+```
+
+The morph runs in `onMorph`. We need module pre-loading to complete before that. There are several options:
+
+#### Option A: Make `onEffect` awaitable
+
+Currently `invokeOnEffect()` is not awaited (line 435 in `request/index.js`). If we make it awaitable (like `invokeOnMorph` is), `supportJsModules.js` could use `onEffect` to wait for pending modules:
+
+```js
+// supportJsModules.js
+interceptMessage(({ message, onSuccess }) => {
+    onSuccess(({ payload, onEffect }) => {
+        onEffect(async () => {
+            let promises = []
+
+            // Component's own module (lazy load case)
+            if (assetIsPendingFor(message.component)) {
+                promises.push(new Promise(resolve => {
+                    runAfterAssetIsLoadedFor(message.component, resolve)
+                }))
+            }
+
+            // New child component modules in the HTML
+            let html = payload.effects.html
+            if (html) {
+                let wrapper = document.createElement('div')
+                wrapper.innerHTML = html
+                wrapper.querySelectorAll('[wire\\:effects]').forEach(el => {
+                    let effects = JSON.parse(el.getAttribute('wire:effects'))
+                    if (!effects.scriptModule) return
+                    let snapshot = JSON.parse(el.getAttribute('wire:snapshot'))
+                    // ... import and cache module
+                    promises.push(importAndCacheModule(snapshot.memo.name, effects.scriptModule))
+                })
+            }
+
+            if (promises.length) await Promise.all(promises)
+        })
+    })
+})
+```
+
+The `processEffects` call happens before `invokeOnEffect` (line 433-435 in `request/index.js`), so the async `import()` is already in flight by the time `onEffect` fires. The `onEffect` handler just waits for it to resolve.
+
+**Trade-offs:**
+- (+) Uses existing hook, semantically correct ("after effects processed, wait for them to settle")
+- (+) Keeps module logic in `supportJsModules.js`
+- (-) Making `onEffect` async could have unintended consequences for other `onEffect` listeners
+- (-) Changes the documented hook contract (though the docs currently describe `onEffect` as "After effects processed" which is vague)
+
+#### Option B: Make `invokeOnMorph` run callbacks sequentially
+
+Change `invokeOnMorph` from `Promise.all` to sequential execution (in registration order). Then ensure `supportJsModules.js` registers its `onMorph` callback before `supportMorphDom.js` by importing it first in `features/index.js`.
+
+```js
+// message.js
+async invokeOnMorph() {
+    for (let interceptor of this.interceptors) {
+        await interceptor.onMorph()
+    }
+}
+```
+
+**Trade-offs:**
+- (+) No new hooks needed
+- (-) Relies on import order in `features/index.js`, which is fragile
+- (-) Sequential execution of all `onMorph` callbacks could be slower than parallel
+- (-) Semantically confusing: the module loading step isn't really "morphing"
+
+#### Option C: Add a dedicated `onBeforeMorph` hook
+
+Add a new awaited hook that runs between `onEffect` and `onMorph`:
+
+```
+onSuccess → onSync → onEffect → onBeforeMorph → onMorph → onFinish → onRender
+```
+
+```js
+// request/index.js
+message.component.processEffects(effects, request)
+message.invokeOnEffect()
+await message.invokeOnBeforeMorph()  // new, awaited
+await message.invokeOnMorph()
+```
+
+**Trade-offs:**
+- (+) Explicit, self-documenting, no ordering ambiguity
+- (+) Clean separation of concerns
+- (-) Adds a new hook to the public API / lifecycle
+- (-) More code to maintain
+
+---
+
+## `<link rel="modulepreload">` (Enhancement, not a fix)
+
+Injecting `<link rel="modulepreload" href="/livewire/js/{component}.js">` tags into `<head>` from PHP would tell the browser to start fetching modules immediately, before any JS runs. This makes the Part 1 pre-import resolve faster since the browser has already started (or finished) downloading the modules by the time `import()` is called.
+
+This also works with `wire:navigate`. The navigate plugin's `mergeNewHead` function swaps in the new page's `<head>` elements. `<link rel="modulepreload">` tags don't match `isAsset()` (which only checks for stylesheets, styles, and scripts), so they're treated as non-asset elements: old ones are removed, new ones are appended. The browser starts preloading as soon as the link is appended to `<head>`, so modules for the new page begin downloading immediately.
+
+`rel="modulepreload"` does work when dynamically added to the DOM (not just when present in the initial HTML). This has been verified.
+
+---
+
+## Resolved Questions
+
+### Lazy component modules: defer, don't preload
+
+Lazy components are lazy for a reason; the user has explicitly said "don't load this until needed." Loading their JS module eagerly contradicts that intent and wastes network if the user never scrolls to the component. When the lazy load AJAX response arrives, the module is handled by the morph delay mechanism (Part 3) and the deferred init safety net (Part 2).
+
+### `wire:navigate`: no special handling needed
+
+Navigate works the same as an initial page load. The navigate plugin calls `Alpine.initTree(document.body)` on the new page, which is the same code path as `Alpine.start()`. The deferred init safety net (Part 2) handles any components with pending modules.
+
+If we implement `<link rel="modulepreload">` tags (the enhancement above), navigate's head merge would swap in the new page's preload hints, and the browser would start fetching modules before `initTree` runs. The `import()` calls would resolve near-instantly from the browser's module cache.
+
+**Important:** Navigate needs to be tested after implementation to verify it all works correctly.
+
+### Double-init of wire directives: not a problem
+
+Detailed analysis confirmed that the deferred init approach (Part 2) does not cause any double initialisation. See the "Why there's no double-init problem" section above for the full walkthrough.
+
+### Flash of content: morph waits, don't rely on user
+
+The morph should delay until all child component modules are loaded. The parent keeps its old state (or lazy placeholder stays visible) until everything is ready. This is handled by Part 3 (delay morph until modules are ready). The user should not need to add `x-cloak` or any other attribute to prevent flash.
+
+Note: `wire:cloak` would NOT help here anyway. It has its own `interceptInit` callback that removes the attribute immediately when the element is first seen, before any module loading. `x-cloak` would work (it's removed by the `x-data` directive handler, which wouldn't run until re-init), but relying on the user to add it is a poor experience.
+
+### Error handling: catch, warn, continue
+
+If a module fails to load (network error, 404), the component should still initialise without its script module's functionality. A partially working component is better than one that never appears.
+
+- **Part 1 (pre-import):** Catch per-module errors. One failed module should not block other components from initialising. Log a console warning.
+- **Part 2 (deferred init):** If the module fails, remove `_x_ignore` and let the component init without the module. Log a console warning.
+- **Part 3 (morph delay):** Don't block the morph forever. Log a console warning and proceed.
