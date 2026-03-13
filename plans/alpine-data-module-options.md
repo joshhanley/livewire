@@ -145,33 +145,49 @@ A handler in `supportJsModules.js` uses `onPrepare` to scan the response payload
 
 ---
 
-## Solution B: Alpine + Livewire (`_x_defer` + `onPrepare`)
+## Solution B: Minimal Fix (deferred init only)
 
-Same as Solution A for scenarios 1, 2, and 3 (async `start()`, `onPrepare` hook, shared module cache). The only difference is the safety net.
+The smallest possible change. No pre-loading, no new hooks, no module cache. Just defer Alpine's initialisation of any component whose module is still loading, and re-initialise when it arrives.
 
-**Safety net:** Instead of manually managing `_x_ignore` and re-init callbacks, add a promise-based `_x_defer` mechanism to Alpine. When `initTree`'s walker encounters an element with `_x_defer` set to a promise, it skips the element and its children, then automatically re-initialises when the promise resolves (or catches and initialises anyway on failure).
+In `lifecycle.js`'s `interceptInit`, after creating a Component, check if its module is still loading and defer if so:
 
-In Livewire's `interceptInit`, the safety net becomes a single line: `el._x_defer = getAssetPromiseFor(component)`. Alpine handles waiting, error recovery, `isConnected` checks, and re-init automatically.
+```js
+let component = initComponent(el)
 
-The `_x_defer` check must be placed *after* `initInterceptors` in Alpine's walker. This is important: Livewire's `interceptInit` is what creates the Component (triggering `processEffects()` which starts the import). If `_x_defer` were checked before interceptors, the Component would never be created. Livewire's `interceptInit` returns early (before its directive processing section) when setting `_x_defer`, preventing directive hooks from firing until re-init.
+if (assetIsPendingFor(component)) {
+    el._x_ignore = true
+    skip()
+
+    runAfterAssetIsLoadedFor(component, () => {
+        if (!el.isConnected) return
+        delete el._x_ignore
+        Alpine.initTree(el)
+    })
+
+    return
+}
+```
+
+No double-init occurs because `_x_marker` is never set when `_x_ignore` is truthy (Alpine's `initTree` only assigns `_x_marker` when `_x_ignore` is falsy), so re-init proceeds as if the element is new. The `interceptInit` callback skips Component creation on re-init because `el.__livewire` already exists.
+
+This stops all crashes across all three scenarios. However, it doesn't solve the user experience:
+
+- **Scenario 1:** Components flash as uninitialised HTML until their module loads, then re-init and become interactive.
+- **Scenarios 2 and 3:** The morph applies immediately (removing placeholders and clearing loading indicators), then the child component sits in the DOM uninitialised until its module loads and re-init fires. The user sees a brief flash of inert content.
 
 | Files changed | What changes |
 |---------------|-------------|
-| All Solution A files | Same changes as Solution A |
-| Alpine's `lifecycle.js` | ~10 lines: `_x_defer` check in walker (after `initInterceptors`) |
-| Livewire's `lifecycle.js` | Safety net uses `el._x_defer = getAssetPromiseFor(component)` instead of `_x_ignore` |
-| `supportJsModules.js` | New `getAssetPromiseFor()` export |
+| `lifecycle.js` | ~15 lines in `interceptInit`: check `assetIsPendingFor()`, set `_x_ignore`, register re-init callback |
 
-**Alpine changes:** ~10 lines in `lifecycle.js`.
+**Alpine changes:** None.
 
 **Trade-offs:**
-- (+) Safety net is a single line in Livewire; Alpine handles the complexity
-- (+) `_x_defer` is a clean, general-purpose API any Alpine plugin could use
-- (+) Error handling built into Alpine (catches failed promises, warns, inits anyway)
-- (+) No manual `_x_ignore` management or re-init callbacks
-- (-) Requires an Alpine change
-- (-) Adds `_x_defer` to Alpine's element property conventions
-- (-) Walker placement is subtle (must be after `initInterceptors`)
+- (+) Smallest possible change; single file, ~15 lines
+- (+) No new hooks, no module cache, no pre-loading logic
+- (+) Stops all crashes immediately
+- (-) FOUC on all three scenarios
+- (-) Loading indicators and placeholders are not preserved (scenarios 2 and 3)
+- (-) Uses Alpine's internal `_x_ignore` flag (undocumented; mitigated by maintaining both projects)
 
 ---
 
