@@ -110,14 +110,9 @@ By the time the module's `import()` resolves, `onEffect` and `onMorph` have alre
 
 5. **Timeout protection:** Module imports that hang (slow CDN, broken URL) must not block response processing indefinitely. Use `Promise.race` with a reasonable timeout so the UI degrades gracefully rather than freezing.
 
-### Known areas needing verification
-
-- **Islands:** `supportIslands.js` has its own DOM insertion path (via `effects.islandFragments` and streamed chunks) that may bypass the normal morph pipeline. Module discovery needs to account for this or be tested against it.
-- **`wire:navigate`:** `inscribeSnapshotAndEffectsOnElement` (component.js) only preserves `listeners`, `url`, and `scripts` effects when caching a page, not `scriptModule`. Alpine.data() registrations persist globally, but `$js` actions bound to the component instance may be lost on navigate cache restore. Needs testing.
-
 ---
 
-## Solution A: Livewire-Only (`_x_ignore` + `onPrepare`)
+## Solution A: Livewire-Only (`onPrepare`)
 
 No Alpine changes. All three scenarios handled in Livewire.
 
@@ -245,4 +240,9 @@ The new `onPrepare` hook follows the existing `interceptMessage` pattern used by
 
 Solution C achieves the same result but introduces a breaking change by making `onSync` awaitable. Solution B stops the crashes but doesn't solve the user experience (FOUC on all three scenarios, loading indicators clear too early).
 
-Solution B could be layered on top of A as a defensive fallback (if a module somehow isn't pre-loaded, the `_x_ignore` check catches it instead of crashing).
+Solution B could be layered on top of A as a defensive fallback (if a module somehow isn't pre-loaded, the `_x_ignore` check catches it instead of crashing), but shouldn't be necessary if the pre-loading is solid.
+
+### Known areas needing verification
+
+- **Islands:** `supportIslands.js` has its own DOM insertion path (via `effects.islandFragments` and streamed chunks) that may bypass the normal morph pipeline. Module discovery needs to account for this or be tested against it.
+- **`wire:navigate`:** `inscribeSnapshotAndEffectsOnElement` (component.js) only preserves `listeners`, `url`, and `scripts` effects when caching a page, not `scriptModule`. Alpine.data() registrations persist globally, but `$js` actions bound to the component instance may be lost on navigate cache restore. Needs testing.
